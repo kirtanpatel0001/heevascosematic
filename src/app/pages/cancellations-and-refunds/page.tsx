@@ -20,7 +20,7 @@ export default function CancellationsAndRefunds() {
       <div className="max-w-4xl mx-auto px-4 py-16 text-gray-700">
         <section className="mb-12">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Order Cancellations</h2>
-          <p className="leading-relaxed mb-4">You may cancel your order within 24 hours of placing it. To request a cancellation, contact support as soon as possible. We cannot cancel orders that have already shipped.</p>
+          <p className="leading-relaxed mb-4">You may cancel your order within 24 hours of placing it. To request a cancellation, contact support as soon as possible. We cannot cancel orders that have already shipped or go comming to ship.</p>
         </section>
 
         <section className="mb-12">
