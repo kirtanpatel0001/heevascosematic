@@ -231,7 +231,7 @@ export default function ContactPage() {
           {/* Right: Form */}
           <div className="w-full md:w-1/2 p-12 lg:p-16 flex flex-col justify-center">
             <h2 className="text-xl font-medium tracking-widest uppercase mb-10 text-gray-800">
-              Send your question
+              Send your question us
             </h2>
 
             <form onSubmit={handleSubmit} className="space-y-4">
