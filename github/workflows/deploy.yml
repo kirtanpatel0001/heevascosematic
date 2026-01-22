@@ -1,0 +1,33 @@
+name: Deploy to Hostinger
+
+on:
+  push:
+    branches:
+      - main  # Confirm your branch name is 'main'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOSTINGER_HOST }}
+          username: ${{ secrets.HOSTINGER_USER }}
+          password: ${{ secrets.HOSTINGER_PASSWORD }}
+          port: 65002
+          script: |
+            # IMPORTANT: Replace 'yourdomain.com' with your actual website domain
+            cd /home/u528297740/domains/yourdomain.com/public_html
+            
+            # Pull the latest changes
+            git pull origin main
+            
+            # Install dependencies and build
+            npm install
+            npm run build
+            
+            # Restart the app (Update this depending on how you run your app)
+            # If you use PM2:
+            pm2 restart all
