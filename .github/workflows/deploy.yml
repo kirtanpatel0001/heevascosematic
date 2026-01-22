@@ -3,7 +3,7 @@ name: Deploy to Hostinger
 on:
   push:
     branches:
-      - main
+      - master  # UPDATED: Matches your repository branch
 
 jobs:
   deploy:
@@ -18,18 +18,16 @@ jobs:
           password: ${{ secrets.HOSTINGER_PASSWORD }}
           port: 65002
           script: |
-            # 1. Go to your website folder (CHANGE 'YOUR_DOMAIN_HERE' below!)
-            cd /home/u528297740/domains/YOUR_DOMAIN_HERE/public_html
+            # 1. Navigate to your specific domain folder
+            cd /home/u528297740/domains/heevas.in/public_html
             
-            # 2. Get the new code
-            git pull origin main
+            # 2. Pull the latest code from the MASTER branch
+            git pull origin master
             
-            # 3. Build the new code
+            # 3. Install dependencies and Build
             npm install
             npm run build
             
-            # 4. Restart the server (Try both methods to be safe)
-            # Method A: For PM2 users
-            pm2 restart all || true
-            # Method B: For standard Hostinger Node.js apps
-            touch tmp/restart.txt
+            # 4. Restart the server to show changes
+            # This tries PM2 first, then the standard Hostinger method
+            pm2 restart all || touch tmp/restart.txt
