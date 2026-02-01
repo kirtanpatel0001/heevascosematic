@@ -295,7 +295,7 @@ export default function OrdersPage() {
 
     if (reviewsData) {
       // Create a Set of product IDs the user has already reviewed
-      const reviewedSet = new Set(reviewsData.map(r => r.product_id));
+      const reviewedSet = new Set(reviewsData.map((r: { product_id: string }) => r.product_id));
       setReviewedProductIds(reviewedSet);
     }
 
