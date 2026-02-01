@@ -219,7 +219,7 @@ const ReviewModal = ({ isOpen, onClose, product, orderId, onSuccess }: { isOpen:
                      {previews.map((src, i) => (
                         <div key={i} className="w-16 h-16 relative rounded-lg border border-gray-200 overflow-hidden group">
                            <Image src={src} fill alt="preview" className="object-cover" />
-                           <button type="button" onClick={() => removeImage(i)} className="absolute top-0 right-0 p-1 bg-black/50 text-white hover:bg-red-500 transition-colors opacity-0 group-hover:opacity-100">
+                           <button type="button" onClick={() => removeImage(i)} className="absolute top-0 right-0 p-1 bg-black/50 text-white hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100">
                              <X size={10} />
                            </button>
                         </div>
@@ -294,8 +294,10 @@ export default function OrdersPage() {
       .eq('user_id', user.id);
 
     if (reviewsData) {
-      // Create a Set of product IDs the user has already reviewed
-      const reviewedSet = new Set(reviewsData.map((r: { product_id: string }) => r.product_id));
+      // -------------------------------------------------------------
+      // FIX: Explicitly cast to 'any' and enforce Set<string>
+      // -------------------------------------------------------------
+      const reviewedSet = new Set<string>(reviewsData.map((r: any) => r.product_id));
       setReviewedProductIds(reviewedSet);
     }
 
@@ -541,7 +543,7 @@ export default function OrdersPage() {
           onClose={() => setReviewModalOpen(false)} 
           product={reviewProduct} 
           orderId={activeOrderId}
-          onSuccess={fetchData} // <--- REFRESH DATA ON SUCCESS
+          onSuccess={fetchData} 
         />
       )}
 
