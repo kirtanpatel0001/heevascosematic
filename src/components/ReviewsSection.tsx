@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Image from "next/image";
-import { markReviewAsHelpful } from "@/app/actions/review-actions"; // IMPORTED NEW ACTION
+import { markReviewAsHelpful } from "@/app/actions/review-actions"; 
 import { 
   Star, 
   CheckCircle, 
@@ -21,16 +21,20 @@ interface Review {
   comment: string;
   created_at: string;
   images?: string[];
-  helpful_count?: number; // Ensure this is in your DB query
+  helpful_count?: number; 
 }
 
+// 👇 FIXED: Added productId to the interface
 interface ReviewsSectionProps {
   reviews: Review[];
+  productId: string; 
 }
 
 type SortOption = 'helpful' | 'newest' | 'highest' | 'lowest';
 
-export default function ReviewsSection({ reviews = [] }: ReviewsSectionProps) {
+// 👇 FIXED: Added productId to the component props
+export default function ReviewsSection({ reviews = [], productId }: ReviewsSectionProps) {
+  
   // State for sorting & pagination
   const [sortBy, setSortBy] = useState<SortOption>('helpful');
   const [visibleCount, setVisibleCount] = useState(5);
@@ -54,7 +58,6 @@ export default function ReviewsSection({ reviews = [] }: ReviewsSectionProps) {
         await markReviewAsHelpful(reviewId);
     } catch (error) {
       console.error("Failed to update helpful count", error);
-      // Optional: Revert state if it failed
     }
   };
 
@@ -228,7 +231,7 @@ export default function ReviewsSection({ reviews = [] }: ReviewsSectionProps) {
                                 alt={review.user_name} 
                                 fill 
                                 className="object-cover"
-                                unoptimized // FIX: Prevents "upstream image" errors
+                                unoptimized 
                               />
                            ) : (
                               review.user_name ? review.user_name.charAt(0).toUpperCase() : 'U'
@@ -264,7 +267,7 @@ export default function ReviewsSection({ reviews = [] }: ReviewsSectionProps) {
                       {review.comment}
                     </p>
 
-                    {/* Images - Mobile Overflow Fixed */}
+                    {/* Images */}
                     {review.images && review.images.length > 0 && (
                       <div className="flex gap-2 mt-4 overflow-x-auto pb-2 w-full touch-pan-x scrollbar-hide">
                         {review.images.map((img, i) => (
@@ -274,7 +277,7 @@ export default function ReviewsSection({ reviews = [] }: ReviewsSectionProps) {
                               alt="Review attachment"
                               fill
                               className="object-cover"
-                              unoptimized // FIX: Prevents "upstream image" errors
+                              unoptimized 
                             />
                           </div>
                         ))}
