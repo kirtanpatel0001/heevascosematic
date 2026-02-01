@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation"; // To redirect if needed
-import { supabaseClient } from "@/lib/supabaseClient"; // YOUR SUPABASE CLIENT
+import { useRouter } from "next/navigation";
+import { supabaseClient } from "@/lib/supabaseClient";
 import {
   Star, Minus, Plus, ShoppingBag, Heart,
   ChevronDown, Droplets, Shield, Sparkles, Wind,
@@ -39,7 +39,6 @@ const AccordionItem = ({ title, isOpen, onClick, children }: any) => (
           exit={{ height: 0, opacity: 0 }}
           transition={{ duration: 0.35 }}
         >
-          {/* whitespace-pre-line ensures database text line breaks work */}
           <div className="pb-8 text-sm text-zinc-700 leading-8 whitespace-pre-line">
             {children}
           </div>
@@ -72,7 +71,16 @@ const PillGroup = ({ title, items }: { title: string; items?: string[] }) => {
   );
 };
 
-export default function ProductInfo({ product }: { product: any }) {
+// --- INTERFACE UPDATE: Added ratingStats ---
+interface ProductInfoProps {
+  product: any;
+  ratingStats?: { 
+    average: number; 
+    count: number; 
+  };
+}
+
+export default function ProductInfo({ product, ratingStats }: ProductInfoProps) {
   const supabase = supabaseClient();
   const router = useRouter();
 
@@ -81,7 +89,12 @@ export default function ProductInfo({ product }: { product: any }) {
   const [wish, setWish] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
 
-  // --- INITIAL DATA FETCH (Check Wishlist Status) ---
+  // --- STATS LOGIC ---
+  // Default to 0 if no stats are passed
+  const avgRating = ratingStats?.average || 0;
+  const reviewCount = ratingStats?.count || 0;
+
+  // --- INITIAL DATA FETCH ---
   useEffect(() => {
     const checkWishlist = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -91,13 +104,13 @@ export default function ProductInfo({ product }: { product: any }) {
           .select('id')
           .eq('user_id', user.id)
           .eq('product_id', product.id)
-          .maybeSingle(); // distinct from .single() to avoid error if null
+          .maybeSingle();
         
         if (data) setWish(true);
       }
     };
     checkWishlist();
-  }, [product.id]);
+  }, [product.id, supabase]);
 
   const price = new Intl.NumberFormat("en-IN", {
     style: "currency",
@@ -116,7 +129,7 @@ export default function ProductInfo({ product }: { product: any }) {
     t.toLowerCase().includes("shine") ? <Sparkles size={15} /> :
     <Wind size={15} />;
 
-  // --- AUTH CHECK HELPER ---
+  // --- AUTH CHECK ---
   const checkLogin = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -124,7 +137,7 @@ export default function ProductInfo({ product }: { product: any }) {
         description: "You need to sign in to perform this action.",
         action: {
             label: "Login",
-            onClick: () => router.push('/auth/login') // Update to your login route
+            onClick: () => router.push('/auth/login') 
         }
       });
       return null;
@@ -132,10 +145,9 @@ export default function ProductInfo({ product }: { product: any }) {
     return user;
   };
 
-  // --- HANDLE ADD TO BAG (SUPABASE) ---
+  // --- ADD TO BAG ---
   const handleAddToBag = async () => {
     setIsAdding(true);
-    
     try {
       const user = await checkLogin();
       if (!user) {
@@ -143,7 +155,6 @@ export default function ProductInfo({ product }: { product: any }) {
           return;
       }
 
-      // 1. Check if item exists
       const { data: existingItem } = await supabase
         .from('cart_items')
         .select('id, quantity')
@@ -152,23 +163,19 @@ export default function ProductInfo({ product }: { product: any }) {
         .maybeSingle();
 
       if (existingItem) {
-        // 2a. Update Quantity
         const newQty = existingItem.quantity + qty;
         await supabase
             .from('cart_items')
             .update({ quantity: newQty })
             .eq('id', existingItem.id);
       } else {
-        // 2b. Insert New Row
         await supabase
             .from('cart_items')
             .insert([{ user_id: user.id, product_id: product.id, quantity: qty }]);
       }
 
-      // Success Toast
       toast.success(`Added ${qty} x ${product.name} to your bag`, {
         description: "View your cart to checkout",
-        
         style: { background: '#333', color: '#fff', border: 'none' }
       });
 
@@ -180,21 +187,19 @@ export default function ProductInfo({ product }: { product: any }) {
     }
   };
 
-  // --- HANDLE WISHLIST (SUPABASE) ---
+  // --- WISHLIST ---
   const handleWishlist = async () => {
-    // 1. Optimistic UI update (feels faster)
     const previousState = wish;
     setWish(!wish); 
 
     try {
       const user = await checkLogin();
       if (!user) {
-        setWish(previousState); // Revert if not logged in
+        setWish(previousState);
         return;
       }
 
       if (previousState === true) {
-        // Was liked, now removing
         await supabase
             .from('wishlist_items')
             .delete()
@@ -204,9 +209,7 @@ export default function ProductInfo({ product }: { product: any }) {
         toast("Removed from Wishlist", {
             style: { background: '#fff', color: '#000', border: '1px solid #eee' }
         });
-
       } else {
-        // Was not liked, now adding
         const { error } = await supabase
             .from('wishlist_items')
             .insert([{ user_id: user.id, product_id: product.id }]);
@@ -220,10 +223,27 @@ export default function ProductInfo({ product }: { product: any }) {
       }
     } catch (error) {
         console.error("Wishlist Error:", error);
-        setWish(previousState); // Revert on error
+        setWish(previousState);
         toast.error("Something went wrong.");
     }
   };
+
+  // --- RENDER STARS (YELLOW GOLD) ---
+  const renderStars = (rating: number) => (
+    <div className="flex gap-0.5">
+      {[...Array(5)].map((_, i) => (
+        <Star 
+          key={i} 
+          size={16} // Slightly larger for better visibility
+          className={`${
+            i < Math.floor(rating) 
+              ? "text-yellow-500 fill-yellow-500"  // GOLD COLOR
+              : "text-zinc-200 fill-zinc-100"      // EMPTY STATE
+          }`}
+        />
+      ))}
+    </div>
+  );
 
   return (
     <div className={`${montserrat.className} space-y-14`}>
@@ -238,13 +258,19 @@ export default function ProductInfo({ product }: { product: any }) {
           {product.name}
         </h1>
 
+        {/* --- DYNAMIC RATING SECTION --- */}
         <div className="flex items-center gap-3 mt-4">
-          <div className="flex">
-            {[...Array(5)].map((_, i) => (
-              <Star key={i} size={14} fill="#000" strokeWidth={0} />
-            ))}
-          </div>
-          <span className="text-xs font-bold text-zinc-900">4.8/5</span>
+          {renderStars(avgRating)}
+          
+          <span className="text-sm font-bold text-zinc-900">
+            {avgRating > 0 ? `${avgRating}/5` : "No reviews yet"}
+          </span>
+          
+          {reviewCount > 0 && (
+             <span className="text-xs text-zinc-500 underline underline-offset-2 cursor-pointer decoration-zinc-300 hover:text-black hover:decoration-black transition-all">
+                ({reviewCount} Reviews)
+             </span>
+          )}
         </div>
 
         <div className="mt-7 text-4xl font-medium text-black">

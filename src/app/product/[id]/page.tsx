@@ -6,10 +6,14 @@ import { ChevronRight } from "lucide-react";
 import { Playfair_Display, Montserrat } from "next/font/google";
 import GalleryClient from "@/components/GalleryClient"; 
 import ProductInfo from "@/components/ProductInfo"; 
+import ReviewsSection from "@/components/ReviewsSection"; 
 import { Toaster } from "sonner"; 
 
 const playfair = Playfair_Display({ subsets: ["latin"] });
 const montserrat = Montserrat({ subsets: ["latin"] });
+
+// Force dynamic rendering so reviews are always fresh/real-time
+export const revalidate = 0; 
 
 export async function generateStaticParams() {
   const supabase = getStaticSupabase();
@@ -35,23 +39,39 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   if (error || !product) return notFound();
 
-  // 2. Fetch Related Products (Same Category)
+  // 2. Fetch Related Products
   let { data: relatedProducts } = await supabase
     .from('products')
     .select('id, name, price, image_url, category')
     .eq('category', product.category)
     .neq('id', product.id);
 
-  // 3. FALLBACK: If no related products found, fetch ANY other products
   if (!relatedProducts || relatedProducts.length === 0) {
     const { data: allProducts } = await supabase
       .from('products')
       .select('id, name, price, image_url, category')
       .neq('id', product.id)
-      .limit(8); // Show 8 random other products if category is empty
-    
+      .limit(8); 
     relatedProducts = allProducts || [];
   }
+
+  // 3. FETCH REVIEWS & CALCULATE STATS
+  const { data: reviews } = await supabase
+    .from('reviews')
+    .select('*')
+    .eq('product_id', id)
+    .order('created_at', { ascending: false });
+
+  // --- CALCULATION LOGIC ---
+  const totalReviews = reviews?.length || 0;
+  
+  // Calculate Average (e.g., 4.8)
+  const averageRating = totalReviews > 0
+    ? reviews!.reduce((acc, review) => acc + review.rating, 0) / totalReviews
+    : 0;
+    
+  // Format formatted (e.g. "4.8") to ensure no long decimals
+  const formattedRating = Number(averageRating.toFixed(1));
 
   const formatPrice = (price: number) => 
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(price);
@@ -87,15 +107,25 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
           {/* RIGHT: DETAILS */}
           <div className="w-full lg:col-span-5 px-6 md:px-0">
-             <ProductInfo product={product} />
+             {/* Pass Calculated Stats to ProductInfo */}
+             <ProductInfo 
+                product={product} 
+                ratingStats={{ average: formattedRating, count: totalReviews }} 
+             />
           </div>
         </div>
 
         {/* --- DIVIDER --- */}
         <div className="w-full h-px bg-zinc-200 my-16 md:my-24 px-6 mx-auto"></div>
 
-        {/* --- RELATED PRODUCTS SECTION --- */}
-        {/* We removed the conditional check so this section ALWAYS renders if products exist */}
+        {/* --- REVIEWS SECTION --- */}
+        {/* Pass raw reviews, the component handles the progress bars internally */}
+        <ReviewsSection productId={product.id} reviews={reviews || []} />
+
+        {/* --- DIVIDER --- */}
+        <div className="w-full h-px bg-zinc-200 my-16 md:my-24 px-6 mx-auto"></div>
+
+        {/* --- RELATED PRODUCTS --- */}
         {relatedProducts && relatedProducts.length > 0 ? (
           <div className="w-full px-6 md:px-0">
             <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
@@ -129,21 +159,20 @@ export default async function ProductPage({ params }: ProductPageProps) {
                      </div>
                      <div className="text-left flex flex-col flex-grow">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2 block">
-                            {item.category}
+                           {item.category}
                         </span>
                         <h3 className={`${playfair.className} text-[17px] font-bold text-black leading-tight mb-2 group-hover:underline decoration-1 underline-offset-4`}>
-                            {item.name}
+                           {item.name}
                         </h3>
                         <p className="text-sm font-semibold text-zinc-900 mt-auto pt-1">
-                            {formatPrice(item.price)}
+                           {formatPrice(item.price)}
                         </p>
                      </div>
                   </Link>
-               ))}<br/>
+               ))}
             </div>
           </div>
         ) : (
-          /* Debugging Helper: If it's STILL empty, show this message */
           <div className="text-center py-10 text-zinc-400 text-sm">
             No related products found 
           </div>

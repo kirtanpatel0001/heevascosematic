@@ -4,7 +4,8 @@ import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { 
-  Search, Heart, Loader2, ImageOff, Filter, X, LogIn, ShoppingBag, CheckCircle
+  Search, Heart, Loader2, ImageOff, Filter, X, LogIn, ShoppingBag, CheckCircle, 
+  ChevronDown, Minus, Plus
 } from 'lucide-react';
 import { supabaseClient } from '@/lib/supabaseClient';
 
@@ -22,7 +23,12 @@ interface Product {
   status: string;
 }
 
-// --- TOAST COMPONENT ---
+// --- CONSTANTS ---
+const CATEGORIES = ['Hair Oil', 'Shampoo', 'Conditioner', 'Hair Mask', 'Serums'];
+const CONCERNS = ['Hair Fall Control', 'Anti-Dandruff', 'Scalp Therapy', 'Damage Repair', 'Frizz Control', 'Shine & Glow', 'Deep Hydration'];
+const HAIR_TYPES = ['Straight', 'Wavy', 'Curly', 'Coily', 'Fine', 'Thick'];
+
+// --- 1. TOAST NOTIFICATION ---
 const Toast = ({ 
   show, 
   onClose, 
@@ -55,11 +61,11 @@ const Toast = ({
 
         <div>
           <h4 className={`text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1 ${type === 'cart' ? 'text-green-600' : 'text-red-500'}`}>
-             {type === 'cart' ? (
-               <><CheckCircle size={14} /> Added to Bag</>
-             ) : (
-               <><Heart size={14} fill="currentColor" /> Added to Wishlist</>
-             )}
+              {type === 'cart' ? (
+                <><CheckCircle size={14} /> Added to Bag</>
+              ) : (
+                <><Heart size={14} fill="currentColor" /> Added to Wishlist</>
+              )}
           </h4>
           <p className="text-sm font-medium text-gray-900 line-clamp-1">{product.name}</p>
           
@@ -74,52 +80,231 @@ const Toast = ({
   );
 };
 
-// --- SHOP CONTENT COMPONENT (uses useSearchParams) ---
+// --- 2. COLLAPSIBLE SECTION ---
+const FilterSection = ({ 
+  title, 
+  children, 
+  isOpenDefault = true 
+}: { 
+  title: string; 
+  children: React.ReactNode; 
+  isOpenDefault?: boolean;
+}) => {
+  const [isOpen, setIsOpen] = useState(isOpenDefault);
+
+  return (
+    <div className="border-b border-gray-100 py-6 last:border-0">
+      <button 
+        onClick={() => setIsOpen(!isOpen)} 
+        className="flex items-center justify-between w-full group mb-4"
+      >
+        <h3 className="text-xs font-bold uppercase tracking-widest text-gray-900 group-hover:text-black">{title}</h3>
+        {isOpen ? <Minus size={14} className="text-gray-400" /> : <Plus size={14} className="text-gray-400" />}
+      </button>
+      
+      <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
+        {children}
+      </div>
+    </div>
+  );
+};
+
+// --- 3. FILTER PANEL (MOVED OUTSIDE TO FIX SCROLL BUG) ---
+interface FilterPanelProps {
+  searchTerm: string;
+  setSearchTerm: (v: string) => void;
+  inStockOnly: boolean;
+  setInStockOnly: (v: boolean) => void;
+  selectedCategories: string[];
+  setSelectedCategories: React.Dispatch<React.SetStateAction<string[]>>;
+  selectedConcerns: string[];
+  setSelectedConcerns: React.Dispatch<React.SetStateAction<string[]>>;
+  selectedHairTypes: string[];
+  setSelectedHairTypes: React.Dispatch<React.SetStateAction<string[]>>;
+  priceRange: { min: number | ''; max: number | '' };
+  setPriceRange: React.Dispatch<React.SetStateAction<{ min: number | ''; max: number | '' }>>;
+  clearFilters: () => void;
+}
+
+const FilterPanel = ({
+  searchTerm, setSearchTerm,
+  inStockOnly, setInStockOnly,
+  selectedCategories, setSelectedCategories,
+  selectedConcerns, setSelectedConcerns,
+  selectedHairTypes, setSelectedHairTypes,
+  priceRange, setPriceRange,
+  clearFilters
+}: FilterPanelProps) => {
+  
+  const toggleSelection = (item: string, list: string[], setList: React.Dispatch<React.SetStateAction<string[]>>) => {
+    if (list.includes(item)) {
+      setList(list.filter(i => i !== item));
+    } else {
+      setList([...list, item]);
+    }
+  };
+
+  return (
+    <div className="space-y-2 pr-2">
+      {/* SEARCH */}
+      <div className="mb-8">
+        <h3 className="text-xs font-bold uppercase tracking-widest mb-4">Search</h3>
+        <div className="relative">
+          <input 
+            type="text" 
+            placeholder="Search products..." 
+            value={searchTerm} 
+            onChange={(e) => setSearchTerm(e.target.value)} 
+            className="w-full bg-white border border-gray-200 p-3 pl-9 text-xs focus:outline-none focus:border-black transition-colors rounded-sm" 
+          />
+          <Search className="absolute left-3 top-3 text-gray-400" size={14} />
+        </div>
+      </div>
+
+      {/* AVAILABILITY */}
+      <div className="pb-6 border-b border-gray-100">
+         <label className="flex items-center gap-3 cursor-pointer group">
+            <div className={`w-4 h-4 border flex items-center justify-center transition-colors rounded-sm ${inStockOnly ? 'border-black bg-black text-white' : 'border-gray-300'}`}>
+              {inStockOnly && <CheckCircle size={10} />}
+            </div>
+            <input type="checkbox" className="hidden" checked={inStockOnly} onChange={() => setInStockOnly(!inStockOnly)} />
+            <span className="text-xs text-gray-700 uppercase tracking-wide group-hover:text-black">Exclude Out of Stock</span>
+         </label>
+      </div>
+
+      {/* CATEGORIES */}
+      <FilterSection title="Category">
+        <div className="space-y-3">
+          {CATEGORIES.map(cat => (
+            <label key={cat} className="flex items-center gap-3 cursor-pointer group">
+              <div className={`w-4 h-4 border flex items-center justify-center transition-colors rounded-sm ${selectedCategories.includes(cat) ? 'border-black bg-black text-white' : 'border-gray-300'}`}>
+                {selectedCategories.includes(cat) && <CheckCircle size={10} />}
+              </div>
+              <input 
+                type="checkbox" 
+                className="hidden" 
+                checked={selectedCategories.includes(cat)} 
+                onChange={() => toggleSelection(cat, selectedCategories, setSelectedCategories)} 
+              />
+              <span className={`text-xs uppercase tracking-wider ${selectedCategories.includes(cat) ? 'text-black font-bold' : 'text-gray-500 group-hover:text-black'}`}>{cat}</span>
+            </label>
+          ))}
+        </div>
+      </FilterSection>
+
+      {/* CONCERNS */}
+      <FilterSection title="Hair Concern">
+        <div className="space-y-3">
+          {CONCERNS.map(concern => (
+            <label key={concern} className="flex items-center gap-3 cursor-pointer group">
+              <div className={`w-4 h-4 border flex items-center justify-center transition-colors rounded-sm ${selectedConcerns.includes(concern) ? 'border-black bg-black text-white' : 'border-gray-300'}`}>
+                {selectedConcerns.includes(concern) && <CheckCircle size={10} />}
+              </div>
+              <input 
+                type="checkbox" 
+                className="hidden" 
+                checked={selectedConcerns.includes(concern)} 
+                onChange={() => toggleSelection(concern, selectedConcerns, setSelectedConcerns)} 
+              />
+              <span className={`text-xs uppercase tracking-wider ${selectedConcerns.includes(concern) ? 'text-black font-bold' : 'text-gray-500 group-hover:text-black'}`}>{concern}</span>
+            </label>
+          ))}
+        </div>
+      </FilterSection>
+
+      {/* HAIR TYPE */}
+      <FilterSection title="Hair Type" isOpenDefault={false}>
+        <div className="space-y-3">
+          {HAIR_TYPES.map(type => (
+            <label key={type} className="flex items-center gap-3 cursor-pointer group">
+              <div className={`w-4 h-4 border flex items-center justify-center transition-colors rounded-sm ${selectedHairTypes.includes(type) ? 'border-black bg-black text-white' : 'border-gray-300'}`}>
+                {selectedHairTypes.includes(type) && <CheckCircle size={10} />}
+              </div>
+              <input 
+                type="checkbox" 
+                className="hidden" 
+                checked={selectedHairTypes.includes(type)} 
+                onChange={() => toggleSelection(type, selectedHairTypes, setSelectedHairTypes)} 
+              />
+              <span className={`text-xs uppercase tracking-wider ${selectedHairTypes.includes(type) ? 'text-black font-bold' : 'text-gray-500 group-hover:text-black'}`}>{type}</span>
+            </label>
+          ))}
+        </div>
+      </FilterSection>
+
+      {/* PRICE RANGE (MIN - MAX) */}
+      <FilterSection title="Price Range">
+         <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">₹</span>
+               <input 
+                 type="number" 
+                 placeholder="Min" 
+                 value={priceRange.min}
+                 onChange={(e) => setPriceRange({...priceRange, min: e.target.value ? Number(e.target.value) : ''})}
+                 className="w-full bg-gray-50 border border-gray-200 p-2 pl-6 text-xs rounded-sm focus:outline-none focus:border-black"
+               />
+            </div>
+            <span className="text-gray-400">-</span>
+            <div className="relative flex-1">
+               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">₹</span>
+               <input 
+                 type="number" 
+                 placeholder="Max" 
+                 value={priceRange.max}
+                 onChange={(e) => setPriceRange({...priceRange, max: e.target.value ? Number(e.target.value) : ''})}
+                 className="w-full bg-gray-50 border border-gray-200 p-2 pl-6 text-xs rounded-sm focus:outline-none focus:border-black"
+               />
+            </div>
+         </div>
+         {/* Predefined Ranges */}
+         <div className="mt-4 space-y-2">
+            <button onClick={() => setPriceRange({min: 0, max: 500})} className="text-[10px] text-gray-500 underline hover:text-black block">Under ₹500</button>
+            <button onClick={() => setPriceRange({min: 500, max: 1000})} className="text-[10px] text-gray-500 underline hover:text-black block">₹500 - ₹1000</button>
+            <button onClick={() => setPriceRange({min: 1000, max: 2000})} className="text-[10px] text-gray-500 underline hover:text-black block">₹1000 - ₹2000</button>
+         </div>
+      </FilterSection>
+
+      {/* CLEAR FILTERS */}
+      <button 
+        onClick={clearFilters} 
+        className="w-full mt-8 py-3 text-xs font-bold uppercase tracking-widest border border-black hover:bg-black hover:text-white transition-all"
+      >
+        Reset Filters
+      </button>
+    </div>
+  );
+};
+
+// --- 4. MAIN COMPONENT ---
 function ShopContent() {
   const supabase = supabaseClient();
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // Data States
+  // --- DATA STATES ---
   const [products, setProducts] = useState<Product[]>([]);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   
-  // UI States
+  // --- UI STATES ---
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  
-  // Toast State
   const [toast, setToast] = useState<{ show: boolean; product: Product | null; type: 'cart' | 'wishlist' | 'error' }>({
     show: false, product: null, type: 'cart'
   });
 
-  // Filters
+  // --- FILTER STATES ---
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedConcern, setSelectedConcern] = useState('All'); 
-  const [maxPrice, setMaxPrice] = useState(100000);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedConcerns, setSelectedConcerns] = useState<string[]>([]); 
+  const [selectedHairTypes, setSelectedHairTypes] = useState<string[]>([]);
+  const [priceRange, setPriceRange] = useState<{min: number | ''; max: number | ''}>({ min: '', max: '' });
+  const [inStockOnly, setInStockOnly] = useState(false);
   const [sortOrder, setSortOrder] = useState('default');
 
-  // --- URL FILTER LOGIC ---
-  useEffect(() => {
-    const concernFromUrl = searchParams.get('concern');
-    if (concernFromUrl) {
-      const mapping: Record<string, string> = {
-        'hair-fall': 'Hair Fall Control',
-        'anti-dandruff': 'Anti-Dandruff',
-        'frizz-dryness': 'Frizz Control',
-        'scalp-detox': 'Scalp Therapy',
-        'damage-repair': 'Damage Repair',
-        'shine-glow': 'Shine & Glow',
-        'deep-hydration': 'Deep Hydration'
-      };
-      if (mapping[concernFromUrl]) setSelectedConcern(mapping[concernFromUrl]);
-    }
-  }, [searchParams]);
-
-  // --- FETCH PRODUCTS ---
+  // --- INITIAL LOAD ---
   useEffect(() => {
     const initData = async () => {
       setLoading(true);
@@ -129,11 +314,46 @@ function ShopContent() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: wishlistData } = await supabase.from('wishlist_items').select('product_id').eq('user_id', user.id);
-          if (wishlistData) setWishlistIds(new Set(wishlistData.map((item: { product_id: string }) => item.product_id)));      }
+        if (wishlistData) setWishlistIds(new Set(wishlistData.map((item: { product_id: string }) => item.product_id)));      
+      }
       setLoading(false);
     };
     initData();
-  }, []);
+  }, [searchParams]);
+
+  // --- FILTER LOGIC ---
+  const clearFilters = () => {
+    setSearchTerm('');
+    setSelectedCategories([]);
+    setSelectedConcerns([]);
+    setSelectedHairTypes([]);
+    setPriceRange({ min: '', max: '' });
+    setInStockOnly(false);
+  };
+
+  const filteredProducts = useMemo(() => {
+    let result = products.filter((p) => {
+      const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(p.category);
+      const matchesConcern = selectedConcerns.length === 0 || (
+        p.hair_concern && p.hair_concern.some(c => selectedConcerns.includes(c))
+      );
+      const matchesHairType = selectedHairTypes.length === 0 || (
+        p.hair_type && p.hair_type.some(t => selectedHairTypes.includes(t))
+      );
+      const min = typeof priceRange.min === 'number' ? priceRange.min : 0;
+      const max = typeof priceRange.max === 'number' ? priceRange.max : 1000000;
+      const matchesPrice = p.price >= min && p.price <= max;
+      const matchesStock = !inStockOnly || p.stock > 0;
+
+      return matchesSearch && matchesCategory && matchesConcern && matchesHairType && matchesPrice && matchesStock;
+    });
+
+    if (sortOrder === 'low-to-high') result.sort((a, b) => a.price - b.price);
+    if (sortOrder === 'high-to-low') result.sort((a, b) => b.price - a.price);
+
+    return result;
+  }, [searchTerm, selectedCategories, selectedConcerns, selectedHairTypes, priceRange, inStockOnly, sortOrder, products]);
 
   // --- ACTIONS ---
   const checkLogin = async () => {
@@ -174,69 +394,11 @@ function ShopContent() {
     }
   };
 
-  // --- FILTER LOGIC ---
-  const filteredProducts = useMemo(() => {
-    let result = products.filter((p) => {
-      const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
-      const matchesConcern = selectedConcern === 'All' || (p.hair_concern && p.hair_concern.some((c: string) => c.toLowerCase() === selectedConcern.toLowerCase()));
-      const matchesPrice = p.price <= maxPrice;
-      return matchesSearch && matchesCategory && matchesConcern && matchesPrice;
-    });
-    if (sortOrder === 'low-to-high') result.sort((a, b) => a.price - b.price);
-    if (sortOrder === 'high-to-low') result.sort((a, b) => b.price - a.price);
-    return result;
-  }, [searchTerm, selectedCategory, selectedConcern, maxPrice, sortOrder, products]);
-
-  const categories = ['All', 'Hair Oil', 'Shampoo', 'Conditioner', 'Hair Mask'];
-  const concerns = ['All', 'Hair Fall Control', 'Anti-Dandruff', 'Scalp Therapy', 'Damage Repair', 'Frizz Control', 'Shine & Glow', 'Deep Hydration'];
-
-  const FilterContent = () => (
-    <div className="space-y-8 pr-4">
-      <div>
-        <h3 className="text-xs font-bold uppercase tracking-widest mb-4">Search</h3>
-        <div className="relative">
-          <input type="text" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white border border-gray-200 p-3 pl-9 text-xs focus:outline-none focus:border-black transition-colors" />
-          <Search className="absolute left-3 top-3 text-gray-400" size={14} />
-        </div>
-      </div>
-      <div>
-        <h3 className="text-xs font-bold uppercase tracking-widest mb-4">Product Type</h3>
-        <div className="space-y-2">
-          {categories.map(cat => (
-            <label key={cat} className="flex items-center gap-3 cursor-pointer group">
-              <div className={`w-3 h-3 border flex items-center justify-center transition-colors ${selectedCategory === cat ? 'border-black bg-black' : 'border-gray-300 group-hover:border-gray-500'}`}>{selectedCategory === cat && <div className="w-1 h-1 bg-white rounded-full" />}</div>
-              <input type="radio" name="category" className="hidden" checked={selectedCategory === cat} onChange={() => setSelectedCategory(cat)} />
-              <span className={`text-xs uppercase tracking-wider ${selectedCategory === cat ? 'text-black font-bold' : 'text-gray-500 group-hover:text-black transition-colors'}`}>{cat}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-      <div>
-        <h3 className="text-xs font-bold uppercase tracking-widest mb-4">Shop By Concern</h3>
-        <div className="space-y-2">
-          {concerns.map(type => (
-            <label key={type} className="flex items-center gap-3 cursor-pointer group">
-              <div className={`w-3 h-3 border flex items-center justify-center transition-colors ${selectedConcern === type ? 'border-black bg-black' : 'border-gray-300 group-hover:border-gray-500'}`}>{selectedConcern === type && <div className="w-1 h-1 bg-white rounded-full" />}</div>
-              <input type="radio" name="concern" className="hidden" checked={selectedConcern === type} onChange={() => setSelectedConcern(type)} />
-              <span className={`text-xs uppercase tracking-wider ${selectedConcern === type ? 'text-black font-bold' : 'text-gray-500 group-hover:text-black transition-colors'}`}>{type}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-      <div>
-        <h3 className="text-xs font-bold uppercase tracking-widest mb-4">Price</h3>
-        <input type="range" min="0" max="100000" step="100" value={maxPrice} onChange={(e) => setMaxPrice(Number(e.target.value))} className="w-full h-0.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-black" />
-        <div className="flex justify-between text-[10px] text-gray-500 mt-3 font-medium tracking-wide"><span>₹0</span><span>₹{maxPrice}+</span></div>
-      </div>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-white font-sans text-gray-900 relative">
       <Toast show={toast.show} onClose={() => setToast(prev => ({...prev, show: false}))} product={toast.product} type={toast.type} />
       
-      {/* Header */}
+      {/* HEADER */}
       <div className="bg-white border-b border-gray-100 py-16">
         <div className="max-w-7xl mx-auto px-6 text-center">
           <h1 className="text-3xl font-light tracking-wider mb-3">Shop All</h1>
@@ -246,7 +408,7 @@ function ShopContent() {
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-12">
         
-        {/* Mobile Toolbar */}
+        {/* MOBILE TOOLBAR */}
         <div className="md:hidden flex justify-between items-center mb-8 sticky top-0 bg-white z-20 py-4 border-b">
           <button onClick={() => setIsMobileFilterOpen(true)} className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest border border-gray-200 px-4 py-3 hover:bg-black hover:text-white transition-colors">
             <Filter size={12} /> Filter
@@ -254,16 +416,36 @@ function ShopContent() {
           <span className="text-[10px] text-gray-500 tracking-wide">{filteredProducts.length} Items</span>
         </div>
 
-        <div className="flex flex-col md:flex-row gap-8 lg:gap-20">
-          <aside className="hidden md:block w-56 flex-shrink-0 sticky top-24 h-fit"><FilterContent /></aside>
+        <div className="flex flex-col md:flex-row gap-8 lg:gap-16">
+          
+          {/* DESKTOP SIDEBAR */}
+          <aside className="hidden md:block w-64 flex-shrink-0 sticky top-24 h-[calc(100vh-100px)] overflow-y-auto custom-scrollbar">
+             <FilterPanel 
+               searchTerm={searchTerm} setSearchTerm={setSearchTerm}
+               inStockOnly={inStockOnly} setInStockOnly={setInStockOnly}
+               selectedCategories={selectedCategories} setSelectedCategories={setSelectedCategories}
+               selectedConcerns={selectedConcerns} setSelectedConcerns={setSelectedConcerns}
+               selectedHairTypes={selectedHairTypes} setSelectedHairTypes={setSelectedHairTypes}
+               priceRange={priceRange} setPriceRange={setPriceRange}
+               clearFilters={clearFilters}
+             />
+          </aside>
 
+          {/* PRODUCT GRID */}
           <div className="flex-1">
-            {/* Desktop Sort */}
             <div className="hidden md:flex justify-between items-end mb-10 pb-4 border-b border-gray-100">
-              <span className="text-[10px] text-gray-400 uppercase tracking-widest">{filteredProducts.length} Results</span>
+              <div className="flex gap-4 items-center">
+                  <span className="text-[10px] text-gray-400 uppercase tracking-widest">{filteredProducts.length} Results</span>
+                  {(selectedCategories.length > 0 || selectedConcerns.length > 0 || priceRange.min !== '' || priceRange.max !== '') && (
+                     <span className="text-[10px] text-black font-bold cursor-pointer hover:underline" onClick={clearFilters}>
+                        Clear All X
+                     </span>
+                  )}
+              </div>
+
               <div className="flex items-center gap-3">
                 <span className="text-[10px] uppercase tracking-widest text-gray-400">Sort:</span>
-                <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="text-[10px] font-bold uppercase tracking-widest border-none bg-transparent focus:ring-0 cursor-pointer text-right pr-0">
+                <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} className="text-[10px] font-bold uppercase tracking-widest border-none bg-transparent focus:ring-0 cursor-pointer text-right pr-0 outline-none">
                   <option value="default">Newest</option>
                   <option value="low-to-high">Price: Low to High</option>
                   <option value="high-to-low">Price: High to Low</option>
@@ -274,19 +456,23 @@ function ShopContent() {
             {loading ? (
               <div className="flex justify-center py-32"><Loader2 className="animate-spin text-gray-200" size={24} /></div>
             ) : filteredProducts.length === 0 ? (
-              <div className="text-center py-32">
+              <div className="text-center py-32 bg-gray-50 rounded-lg">
                 <p className="text-gray-400 text-sm font-light mb-6">No products found matching your criteria.</p>
-                <button onClick={() => { setSearchTerm(''); setSelectedCategory('All'); setSelectedConcern('All'); setMaxPrice(100000); }} className="text-[10px] font-bold uppercase border-b border-black pb-1 hover:opacity-50 tracking-widest">Clear Filters</button>
+                <button onClick={clearFilters} className="text-[10px] font-bold uppercase border-b border-black pb-1 hover:opacity-50 tracking-widest">Clear All Filters</button>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-2 gap-x-4 gap-y-10 md:gap-x-8 md:gap-y-16">
+              <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-10 md:gap-x-6 md:gap-y-12">
                 {filteredProducts.map((product) => {
                   const validImage = product.image_url || (product.images && product.images.length > 0 ? product.images[0] : null);
                   const isWishlisted = wishlistIds.has(product.id);
 
                   return (
-                    <div key={product.id} className="group relative mx-auto w-full max-w-[380px]">
-                      <div className="relative w-full h-[280px] md:h-[450px] overflow-hidden bg-gray-100 mb-4 md:mb-6 border border-transparent cursor-pointer" onClick={() => router.push(`/product/${product.id}`)}>
+                    <div key={product.id} className="group relative mx-auto w-full">
+                      {/* IMAGE */}
+                      <div 
+                        className="relative w-full aspect-[3/4] overflow-hidden bg-gray-100 mb-4 border border-transparent cursor-pointer rounded-sm" 
+                        onClick={() => router.push(`/product/${product.id}`)}
+                      >
                         {validImage ? (
                           <img src={validImage} alt={product.name} className="w-full h-full object-cover transition-transform duration-700 ease-in-out group-hover:scale-105" />
                         ) : (
@@ -305,10 +491,11 @@ function ShopContent() {
                         </button>
                       </div>
 
-                      <div className="text-center space-y-1.5 px-2">
+                      {/* DETAILS */}
+                      <div className="text-left space-y-1.5 px-1">
                         <p className="text-[9px] text-gray-400 uppercase tracking-[0.2em]">{product.category}</p>
-                        <Link href={`/product/${product.id}`}><h3 className="text-xs md:text-sm font-medium text-gray-900 tracking-wide cursor-pointer line-clamp-1">{product.name}</h3></Link>
-                        <p className="text-[11px] font-semibold text-gray-900 mt-1">₹{product.price.toLocaleString()}</p>
+                        <Link href={`/product/${product.id}`}><h3 className="text-sm font-medium text-gray-900 tracking-wide cursor-pointer line-clamp-1 group-hover:underline decoration-1 underline-offset-4">{product.name}</h3></Link>
+                        <p className="text-xs font-semibold text-gray-900 mt-1">₹{product.price.toLocaleString()}</p>
                       </div>
                     </div>
                   );
@@ -319,26 +506,40 @@ function ShopContent() {
         </div>
       </div>
 
+      {/* MOBILE DRAWER */}
       {isMobileFilterOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setIsMobileFilterOpen(false)}></div>
-          <div className="absolute right-0 top-0 h-full w-[280px] bg-white p-8 shadow-2xl overflow-y-auto">
-            <div className="flex justify-between items-center mb-10">
-              <h2 className="text-[10px] font-bold uppercase tracking-[0.2em]">Filters</h2>
+          <div className="absolute right-0 top-0 h-full w-[300px] bg-white p-6 shadow-2xl overflow-y-auto">
+            <div className="flex justify-between items-center mb-8 border-b border-gray-100 pb-4">
+              <h2 className="text-xs font-bold uppercase tracking-[0.2em]">Filter & Sort</h2>
               <button onClick={() => setIsMobileFilterOpen(false)}><X size={18} className="text-gray-400 hover:text-black" /></button>
             </div>
-            <FilterContent />
-            <div className="mt-10 pt-6 border-t border-gray-100">
-              <button onClick={() => setIsMobileFilterOpen(false)} className="w-full bg-black text-white text-[10px] font-bold uppercase tracking-[0.2em] py-4">Show Results</button>
+            
+            <FilterPanel 
+               searchTerm={searchTerm} setSearchTerm={setSearchTerm}
+               inStockOnly={inStockOnly} setInStockOnly={setInStockOnly}
+               selectedCategories={selectedCategories} setSelectedCategories={setSelectedCategories}
+               selectedConcerns={selectedConcerns} setSelectedConcerns={setSelectedConcerns}
+               selectedHairTypes={selectedHairTypes} setSelectedHairTypes={setSelectedHairTypes}
+               priceRange={priceRange} setPriceRange={setPriceRange}
+               clearFilters={clearFilters}
+             />
+            
+            <div className="mt-8 pt-6 border-t border-gray-100 sticky bottom-0 bg-white pb-4">
+              <button onClick={() => setIsMobileFilterOpen(false)} className="w-full bg-black text-white text-[10px] font-bold uppercase tracking-[0.2em] py-4">
+                View {filteredProducts.length} Results
+              </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* LOGIN MODAL */}
       {isLoginModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsLoginModalOpen(false)}></div>
-          <div className="bg-white p-10 max-w-sm w-full relative z-10 text-center shadow-2xl">
+          <div className="bg-white p-10 max-w-sm w-full relative z-10 text-center shadow-2xl rounded-sm">
             <button onClick={() => setIsLoginModalOpen(false)} className="absolute top-4 right-4 text-gray-300 hover:text-black"><X size={18} /></button>
             <div className="mb-6 flex justify-center text-gray-900"><LogIn size={28} strokeWidth={1} /></div>
             <h3 className="text-sm font-bold uppercase tracking-widest mb-3">Sign In Required</h3>
@@ -354,7 +555,7 @@ function ShopContent() {
   );
 }
 
-// --- MAIN EXPORT (with Suspense wrapper) ---
+// --- EXPORT ---
 export default function ShopPage() {
   return (
     <Suspense fallback={
