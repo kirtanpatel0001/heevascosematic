@@ -21,21 +21,22 @@ const HeevasUsingSection = () => {
       desc: "Gently lather to cleanse without stripping natural oils.",
       color: "from-blue-100 to-blue-50",
     },
+    
     {
       id: 3,
       step: "03",
-      title: "Deep Repair",
-      product: "Argan Blossom Hair Mask",
-      desc: "Apply mid-length to ends. Leave for 15 minutes.",
-      color: "from-rose-100 to-rose-50",
-    },
-    {
-      id: 4,
-      step: "04",
       title: "Seal & Protect",
       product: "Argan Lavish Scalp Conditioner",
       desc: "Seal moisture and smooth the cuticle. Rinse with cool water.",
       color: "from-purple-100 to-purple-50",
+    },
+    {
+      id: 4,
+      step: "04",
+      title: "Deep Repair",
+      product: "Argan Blossom Hair Mask",
+      desc: "Apply mid-length to ends. Leave for 15 minutes.",
+      color: "from-rose-100 to-rose-50",
     },
   ];
 

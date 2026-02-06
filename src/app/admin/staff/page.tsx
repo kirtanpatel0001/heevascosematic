@@ -112,7 +112,7 @@ export default function StaffPage() {
   );
 
   return (
-    <div className="min-h-screen pb-20 font-sans text-slate-900 bg-[#F8F9FC]">
+    <div className="min-h-screen pb-20 font-sans text-slate-900 bg-[#F8F9FC] overflow-x-hidden">
       
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-10">

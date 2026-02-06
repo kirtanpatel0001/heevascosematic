@@ -176,13 +176,14 @@ export default function AboutPage() {
           <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center">
             
             <div className="w-full md:w-1/2 relative z-0">
-               <div className="relative aspect-[3/4] w-full shadow-2xl">
+               <div className="relative aspect-[3/4] w-full shadow-2xl bg-white p-8 flex items-center justify-center">
                  <Image 
-                   src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=1000&auto=format&fit=crop"
+                   src="/VIPUAL.PNG"
                    alt="CEO Portrait"
-                   fill
-                   className="object-cover grayscale hover:grayscale-0 transition-all duration-700"
-                   unoptimized={true}
+                   width={400}
+                   height={500}
+                   className="object-contain"
+                   priority
                  />
                </div>
             </div>

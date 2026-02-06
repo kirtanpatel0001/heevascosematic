@@ -395,7 +395,7 @@ function ShopContent() {
   };
 
   return (
-    <div className="min-h-screen bg-white font-sans text-gray-900 relative">
+    <div className="min-h-screen bg-white font-sans text-gray-900 relative overflow-x-hidden">
       <Toast show={toast.show} onClose={() => setToast(prev => ({...prev, show: false}))} product={toast.product} type={toast.type} />
       
       {/* HEADER */}

@@ -177,7 +177,7 @@ const ReviewModal = ({ isOpen, onClose, product, orderId, onSuccess }: { isOpen:
         <div className="p-6 overflow-y-auto">
           <div className="flex gap-4 mb-6 bg-gray-50 p-3 rounded-xl border border-gray-100">
             <div className="relative w-14 h-14 bg-white rounded-lg overflow-hidden border border-gray-200 shadow-sm">
-               {product.image_url && <Image src={product.image_url} alt="p" fill className="object-cover" />}
+               {product.image_url && <Image src={product.image_url} alt="p" fill className="object-cover" unoptimized={true} />}
             </div>
             <div className="flex-1 min-w-0 flex flex-col justify-center">
                <p className="font-bold text-sm text-slate-900 line-clamp-1">{product.name}</p>

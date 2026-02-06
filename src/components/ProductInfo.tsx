@@ -5,48 +5,14 @@ import { useRouter } from "next/navigation";
 import { supabaseClient } from "@/lib/supabaseClient";
 import {
   Star, Minus, Plus, ShoppingBag, Heart,
-  ChevronDown, Droplets, Shield, Sparkles, Wind,
+  Droplets, Shield, Sparkles, Wind,
   CheckCircle, Lock
 } from "lucide-react";
 import { Playfair_Display, Montserrat } from "next/font/google";
-import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner"; 
 
 const playfair = Playfair_Display({ subsets: ["latin"] });
 const montserrat = Montserrat({ subsets: ["latin"] });
-
-/* ---------------- ACCORDION ---------------- */
-const AccordionItem = ({ title, isOpen, onClick, children }: any) => (
-  <div className="border-b border-zinc-200">
-    <button
-      onClick={onClick}
-      className="w-full py-6 flex justify-between items-center group"
-    >
-      <span className="text-xs font-bold uppercase tracking-[0.15em] text-zinc-900 group-hover:text-black transition-colors">
-        {title}
-      </span>
-      <ChevronDown
-        size={16}
-        className={`transition-transform text-zinc-900 ${isOpen ? "rotate-180" : ""}`}
-      />
-    </button>
-
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ height: 0, opacity: 0 }}
-          animate={{ height: "auto", opacity: 1 }}
-          exit={{ height: 0, opacity: 0 }}
-          transition={{ duration: 0.35 }}
-        >
-          <div className="pb-8 text-sm text-zinc-700 leading-8 whitespace-pre-line">
-            {children}
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  </div>
-);
 
 /* ---------------- PILL GROUP ---------------- */
 const PillGroup = ({ title, items }: { title: string; items?: string[] }) => {
@@ -71,7 +37,6 @@ const PillGroup = ({ title, items }: { title: string; items?: string[] }) => {
   );
 };
 
-// --- INTERFACE UPDATE: Added ratingStats ---
 interface ProductInfoProps {
   product: any;
   ratingStats?: { 
@@ -85,12 +50,10 @@ export default function ProductInfo({ product, ratingStats }: ProductInfoProps) 
   const router = useRouter();
 
   const [qty, setQty] = useState(1);
-  const [open, setOpen] = useState("description");
   const [wish, setWish] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
 
   // --- STATS LOGIC ---
-  // Default to 0 if no stats are passed
   const avgRating = ratingStats?.average || 0;
   const reviewCount = ratingStats?.count || 0;
 
@@ -234,11 +197,11 @@ export default function ProductInfo({ product, ratingStats }: ProductInfoProps) 
       {[...Array(5)].map((_, i) => (
         <Star 
           key={i} 
-          size={16} // Slightly larger for better visibility
+          size={16}
           className={`${
             i < Math.floor(rating) 
-              ? "text-yellow-500 fill-yellow-500"  // GOLD COLOR
-              : "text-zinc-200 fill-zinc-100"      // EMPTY STATE
+              ? "text-yellow-500 fill-yellow-500"
+              : "text-zinc-200 fill-zinc-100"
           }`}
         />
       ))}
@@ -281,14 +244,15 @@ export default function ProductInfo({ product, ratingStats }: ProductInfoProps) 
       {/* BENEFITS */}
       {benefits.length > 0 && (
         <div className="grid grid-cols-4 gap-8 border-y border-zinc-100 py-8">
-              {benefits.map((b: string, i: number) => (            <div key={i} className="text-center space-y-3">
-              <div className="w-11 h-11 mx-auto rounded-full border border-zinc-300 text-zinc-800 flex items-center justify-center">
-                {icon(b)}
-              </div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-700">
-                {b.trim()}
-              </p>
-            </div>
+              {benefits.map((b: string, i: number) => (
+                <div key={i} className="text-center space-y-3">
+                  <div className="w-11 h-11 mx-auto rounded-full border border-zinc-300 text-zinc-800 flex items-center justify-center">
+                    {icon(b)}
+                  </div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-700">
+                    {b.trim()}
+                  </p>
+                </div>
           ))}
         </div>
       )}
@@ -354,24 +318,6 @@ export default function ProductInfo({ product, ratingStats }: ProductInfoProps) 
           </span>
         </div>
       </div>
-
-      {/* ACCORDIONS */}
-      <div>
-        <AccordionItem title="Description" isOpen={open === "description"} onClick={() => setOpen("description")}>
-          <p className="italic text-zinc-700">
-            {product.description}
-          </p>
-        </AccordionItem>
-
-        <AccordionItem title="How to Use" isOpen={open === "ritual"} onClick={() => setOpen("ritual")}>
-          <p className="text-zinc-700">{product.how_to_use ? product.how_to_use : "No instructions provided."}</p>
-        </AccordionItem>
-
-        <AccordionItem title="Ingredients" isOpen={open === "ingredients"} onClick={() => setOpen("ingredients")}>
-          <p className="text-zinc-700">{product.ingredients ? product.ingredients : "No ingredients listed."}</p>
-        </AccordionItem>
-      </div>
-
     </div>
   );
 }

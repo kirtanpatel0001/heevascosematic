@@ -162,7 +162,7 @@ export default function POSTerminal() {
                 >
                   <div className="relative w-full aspect-square bg-white rounded-lg mb-3 overflow-hidden border border-gray-100">
                     {product.image_url ? (
-                      <Image src={product.image_url} alt={product.name} fill className="object-cover" />
+                      <Image src={product.image_url} alt={product.name} fill className="object-cover" unoptimized={true} />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-300"><PackageX size={24} /></div>
                     )}

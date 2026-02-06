@@ -265,7 +265,7 @@ export default function OrdersPage() {
   };
 
   return (
-    <div className="min-h-screen pb-10 font-sans text-slate-900 bg-[#F8F9FC] p-6">
+    <div className="min-h-screen pb-10 font-sans text-slate-900 bg-[#F8F9FC] p-6 overflow-x-hidden">
       
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">

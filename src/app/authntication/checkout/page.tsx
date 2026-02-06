@@ -327,10 +327,10 @@ export default function CheckoutPage() {
     }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-black" size={40} /></div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center overflow-x-hidden"><Loader2 className="animate-spin text-black" size={40} /></div>;
 
   return (
-    <main className="min-h-screen bg-[#F9FAFB] py-8 md:py-12 px-4 text-black font-sans">
+    <main className="min-h-screen bg-[#F9FAFB] py-8 md:py-12 px-4 text-black font-sans overflow-x-hidden">
       <Script src="https://checkout.razorpay.com/v1/checkout.js" />
       
       <form onSubmit={handleSubmit} className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">

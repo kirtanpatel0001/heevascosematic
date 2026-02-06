@@ -89,7 +89,7 @@ export default function SettingsPage() {
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-slate-400" /></div>;
 
   return (
-    <div className="min-h-screen pb-20 font-sans text-slate-900 bg-[#F8F9FC] max-w-5xl mx-auto p-6">
+    <div className="min-h-screen pb-20 font-sans text-slate-900 bg-[#F8F9FC] max-w-5xl mx-auto p-6 overflow-x-hidden">
       
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">

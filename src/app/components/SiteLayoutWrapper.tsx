@@ -14,7 +14,7 @@ export default function SiteLayoutWrapper({ children }: { children: React.ReactN
   return (
     <>
       {!isAdminRoute && <Nav />}
-      <main>{children}</main>
+      <main className="overflow-x-hidden">{children}</main>
       {!isAdminRoute && <Footer />}
     </>
   );

@@ -155,7 +155,7 @@ export default function CustomersPage() {
   });
 
   return (
-    <div className="min-h-screen pb-10 font-sans text-slate-900 bg-[#F8F9FC]">
+    <div className="min-h-screen pb-10 font-sans text-slate-900 bg-[#F8F9FC] overflow-x-hidden">
       
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-8">
