@@ -6,7 +6,8 @@ import {
   UploadCloud, Package, ChevronDown, Check,
   Home, ListOrdered
 } from 'lucide-react';
-import { supabaseClient } from '@/lib/supabaseClient';
+import { supabaseClient } from '@/lib/supabaseClient'; // Ensure this path is correct for your project
+import Image from 'next/image';
 
 // --- CONSTANTS ---
 const HAIR_TYPE_OPTIONS = ['Oily', 'Dry', 'Sensitive', 'Normal'];
@@ -17,9 +18,9 @@ const CONCERN_OPTIONS = [
 
 // --- TYPES ---
 interface UsageStep {
-    title: string;
-    text: string;
-    image: string;
+  title: string;
+  text: string;
+  image: string;
 }
 
 interface Product {
@@ -188,10 +189,18 @@ export default function ProductsPage() {
 
   // UPLOAD HELPER
   const uploadFile = async (file: File) => {
-    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${file.name.split('.').pop()}`;
-    const { error } = await supabase.storage.from('product-images').upload(`products/${fileName}`, file);
-    if(error) return null;
-    const { data } = supabase.storage.from('product-images').getPublicUrl(`products/${fileName}`);
+    // 1. Sanitize file name to avoid issues
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 10)}.${fileExt}`;
+    const filePath = `products/${fileName}`; // Matches your folder structure
+
+    const { error } = await supabase.storage.from('product-images').upload(filePath, file);
+    if(error) {
+        console.error("Upload Error:", error);
+        return null;
+    }
+    
+    const { data } = supabase.storage.from('product-images').getPublicUrl(filePath);
     return data.publicUrl;
   }
 
@@ -267,6 +276,62 @@ export default function ProductsPage() {
     setSaving(false);
   };
 
+  // --- NEW DELETE FUNCTION (Fixes Storage Issue) ---
+  const handleDelete = async (product: Product) => {
+    if (!confirm('Are you sure? This will permanently delete the product and its images.')) return;
+    setLoading(true);
+
+    try {
+        // 1. Gather all associated image URLs
+        const allUrls = [
+            ...(product.images || []),
+            product.image_url,
+            product.before_image,
+            product.after_image,
+            ...(product.usage_steps || []).map(s => s.image)
+        ].filter((url): url is string => typeof url === 'string' && url.length > 0);
+
+        // Remove duplicates
+        const uniqueUrls = [...new Set(allUrls)];
+
+        // 2. Extract paths for Supabase Storage
+        // Your URL looks like: .../public/product-images/products/filename.jpg
+        // We need: products/filename.jpg
+        const pathsToDelete = uniqueUrls.map(url => {
+            if (url.includes('/product-images/')) {
+                return url.split('/product-images/')[1];
+            }
+            return null;
+        }).filter((path): path is string => path !== null);
+
+        // 3. Delete files from Storage FIRST
+        if (pathsToDelete.length > 0) {
+            const { error: storageError } = await supabase
+                .storage
+                .from('product-images') // Your bucket name
+                .remove(pathsToDelete);
+            
+            if (storageError) console.error('Storage Delete Warning:', storageError);
+        }
+
+        // 4. Delete row from Database
+        const { error: dbError } = await supabase
+            .from('products')
+            .delete()
+            .eq('id', product.id);
+
+        if (dbError) throw dbError;
+
+        // 5. Refresh UI
+        await fetchProducts();
+
+    } catch (error: any) {
+        alert('Error deleting: ' + error.message);
+    } finally {
+        setLoading(false);
+    }
+  };
+
   const toggleShowOnHome = async (productId?: string, current?: boolean) => {
     if (!productId) return;
     if (!current) {
@@ -312,8 +377,11 @@ export default function ProductsPage() {
               {products.map(product => (
                 <tr key={product.id} className="hover:bg-gray-50 transition-colors group">
                   <td className="p-4 flex items-center gap-3">
-                    <div className="h-10 w-10 bg-gray-100 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
-                      {product.image_url ? <img src={product.image_url} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-400"><Package size={16} /></div>}
+                    <div className="h-10 w-10 bg-gray-100 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0 relative">
+                      {product.image_url ? 
+                        // Using Next.js Image for optimization if configured, or fallback to img
+                        <img src={product.image_url} className="w-full h-full object-cover" alt={product.name} /> 
+                        : <div className="w-full h-full flex items-center justify-center text-gray-400"><Package size={16} /></div>}
                     </div>
                     <div>
                       <span className="font-bold text-gray-900 block truncate max-w-[180px]">{product.name}</span>
@@ -334,7 +402,12 @@ export default function ProductsPage() {
                   <td className="p-4 text-right">
                     <div className="flex justify-end gap-1">
                       <button onClick={() => handleOpenModal(product)} className="p-2 hover:bg-white rounded-lg border border-transparent hover:border-gray-200"><Edit2 size={16} className="text-gray-400 hover:text-black"/></button>
-                      <button onClick={() => { if(confirm('Delete?')) supabase.from('products').delete().eq('id', product.id).then(() => fetchProducts())}} className="p-2 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100"><Trash2 size={16} className="text-gray-400 hover:text-red-600"/></button>
+                      
+                      {/* UPDATED DELETE BUTTON */}
+                      <button onClick={() => handleDelete(product)} className="p-2 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100" title="Delete Product & Images">
+                        <Trash2 size={16} className="text-gray-400 hover:text-red-600"/>
+                      </button>
+
                       <button onClick={() => toggleShowOnHome(product.id, product.show_on_home)} title={product.show_on_home ? 'Remove from Home' : 'Add to Home'} className={`p-2 rounded-lg border transition-all ${product.show_on_home ? 'bg-green-100 border-green-200 text-green-700' : 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'}`}><Home size={16} /></button>
                     </div>
                   </td>
@@ -377,7 +450,7 @@ export default function ProductsPage() {
                              <div><label className="input-label">Benefits (Comma Separated)</label><input className="input-field" placeholder="Sulphate Free, Vegan..." value={benefitsText} onChange={e => setBenefitsText(e.target.value)} /></div>
                          </div>
 
-                         {/* COL 2: Classification */}
+                          {/* COL 2: Classification */}
                          <div className="space-y-5">
                              <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider">2. Classification & Stock</h3>
                              <div className="grid grid-cols-2 gap-3">
