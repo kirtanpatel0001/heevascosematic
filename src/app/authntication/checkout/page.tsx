@@ -247,7 +247,7 @@ export default function CheckoutPage() {
     }
   };
 
-  // --- 5. MAIN SUBMIT HANDLER (RAZORPAY ONLY) ---
+  // --- 5. MAIN SUBMIT HANDLER (RAZORPAY + REDIRECT) ---
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSubmitting(true);
@@ -295,7 +295,7 @@ export default function CheckoutPage() {
           description: "Order Transaction",
           order_id: orderData.id,
           
-          // 2. ON SUCCESS
+          // 2. ON SUCCESS - NOW WITH REDIRECT!
           handler: async function (response: any) {
               secureForm.set('paymentMethod', 'card');
               secureForm.set('razorpay_payment_id', response.razorpay_payment_id);
@@ -304,8 +304,16 @@ export default function CheckoutPage() {
               
               try {
                   // 3. Call Server Action to Verify & Save
-                  await createOrder(secureForm);
+                  const result = await createOrder(secureForm);
+
+                  // 4. MANUAL REDIRECT TO SUCCESS PAGE (FIXED!)
+                  // Matches your folder name: authntication (missing 'e')
+                  router.push(`/authntication/order-success?id=${orderData.id}`);
+
               } catch (err: any) {
+                  // Ignore Next.js redirect errors
+                  if (err.message === 'NEXT_REDIRECT') return;
+
                   setErrorMsg(err.message || "Verification Failed");
                   setSubmitting(false);
               }
@@ -365,7 +373,7 @@ export default function CheckoutPage() {
               <InputField icon={Phone} name="phone" value={formData.phone} onChange={handleInputChange} required placeholder="Phone (10 digits)" maxLength={10} className="md:col-span-2" />
               
               <div className="md:col-span-2 pt-4 pb-1 border-t border-gray-100 mt-2">
-                 <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-2 flex items-center gap-1"><MapPin size={12} /> Delivery Location</p>
+                  <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-2 flex items-center gap-1"><MapPin size={12} /> Delivery Location</p>
               </div>
 
               <InputField icon={Home} name="houseNo" value={formData.houseNo} onChange={handleInputChange} required placeholder="Flat / House No." className="md:col-span-2" />
@@ -377,32 +385,32 @@ export default function CheckoutPage() {
 
               {/* SAVE ADDRESS SECTION */}
               <div className="md:col-span-2 pt-4 border-t border-gray-100 mt-2">
-                 <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-3">Save Address As</p>
-                 <div className="flex flex-wrap gap-3 items-center">
-                    {['Home', 'Work', 'Other'].map(type => (
-                        <button key={type} type="button" onClick={() => setFormData(prev => ({ ...prev, labelType: type }))} className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold border transition-all ${formData.labelType === type ? 'bg-black text-white border-black' : 'bg-white text-gray-500 border-gray-200 hover:border-black'}`}>
-                            {type === 'Home' && <Home size={14} />}
-                            {type === 'Work' && <Briefcase size={14} />}
-                            {type === 'Other' && <MoreHorizontal size={14} />}
-                            {type}
-                        </button>
-                    ))}
-                 </div>
-                 {formData.labelType === 'Other' && (
-                      <div className="mt-3"><input type="text" value={formData.customLabel} onChange={(e) => setFormData(prev => ({ ...prev, customLabel: e.target.value }))} placeholder="Ex: Office" className="w-full border border-gray-200 rounded-lg py-2 px-4 text-sm outline-none focus:border-black" /></div>
-                 )}
+                  <p className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-3">Save Address As</p>
+                  <div className="flex flex-wrap gap-3 items-center">
+                     {['Home', 'Work', 'Other'].map(type => (
+                         <button key={type} type="button" onClick={() => setFormData(prev => ({ ...prev, labelType: type }))} className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold border transition-all ${formData.labelType === type ? 'bg-black text-white border-black' : 'bg-white text-gray-500 border-gray-200 hover:border-black'}`}>
+                             {type === 'Home' && <Home size={14} />}
+                             {type === 'Work' && <Briefcase size={14} />}
+                             {type === 'Other' && <MoreHorizontal size={14} />}
+                             {type}
+                         </button>
+                     ))}
+                  </div>
+                  {formData.labelType === 'Other' && (
+                       <div className="mt-3"><input type="text" value={formData.customLabel} onChange={(e) => setFormData(prev => ({ ...prev, customLabel: e.target.value }))} placeholder="Ex: Office" className="w-full border border-gray-200 rounded-lg py-2 px-4 text-sm outline-none focus:border-black" /></div>
+                  )}
               </div>
 
               <div className="md:col-span-2 pt-4 flex justify-between items-center border-t border-gray-100 mt-4">
-                 {selectedAddressId !== 'new' ? (
-                     <button type="button" onClick={handleDeleteAddress} disabled={deletingAddress} className="text-red-500 hover:text-red-700 text-xs font-bold uppercase tracking-wider flex items-center gap-2 px-2 py-2">
-                        {deletingAddress ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />} Delete
-                     </button>
-                 ) : <div></div>}
-                 <button type="button" onClick={handleSaveOrUpdateAddress} disabled={savingAddress} className={`text-xs font-bold uppercase tracking-wider px-5 py-3 rounded-lg border transition-all flex items-center gap-2 ${selectedAddressId === 'new' ? 'bg-black text-white border-black' : 'bg-white text-black border-black hover:bg-gray-50'}`}>
-                    {savingAddress ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
-                    {selectedAddressId === 'new' ? 'Save For Future' : 'Update Changes'}
-                 </button>
+                  {selectedAddressId !== 'new' ? (
+                      <button type="button" onClick={handleDeleteAddress} disabled={deletingAddress} className="text-red-500 hover:text-red-700 text-xs font-bold uppercase tracking-wider flex items-center gap-2 px-2 py-2">
+                         {deletingAddress ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />} Delete
+                      </button>
+                  ) : <div></div>}
+                  <button type="button" onClick={handleSaveOrUpdateAddress} disabled={savingAddress} className={`text-xs font-bold uppercase tracking-wider px-5 py-3 rounded-lg border transition-all flex items-center gap-2 ${selectedAddressId === 'new' ? 'bg-black text-white border-black' : 'bg-white text-black border-black hover:bg-gray-50'}`}>
+                     {savingAddress ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
+                     {selectedAddressId === 'new' ? 'Save For Future' : 'Update Changes'}
+                  </button>
               </div>
             </div>
           </div>
