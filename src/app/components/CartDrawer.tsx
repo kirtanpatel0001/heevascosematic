@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Drawer from './Drawer';
 import Link from 'next/link';
 import { ShoppingBag, X, ArrowRight, ShoppingCart, Minus, Plus, Trash2, Loader2 } from 'lucide-react';
@@ -25,7 +25,7 @@ export default function CartDrawer({ open, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // 1. Setup User ID once on mount
+  // 1. Get User
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -34,11 +34,11 @@ export default function CartDrawer({ open, onClose }: Props) {
     getUser();
   }, []);
 
-  // 2. Fetch Cart Function
-  const fetchUserCart = async () => {
+  // 2. Fetch Function (Wrapped in useCallback to be stable)
+  const fetchUserCart = useCallback(async () => {
     if (!userId) return;
     
-    // Only show loader if we don't have items yet (prevents flicker on updates)
+    // Only show spinner if we have NO items. If we have items, just update silently.
     if (cartItems.length === 0) setLoading(true);
 
     const { data, error } = await supabase
@@ -48,7 +48,7 @@ export default function CartDrawer({ open, onClose }: Props) {
         product:products (id, name, price, image_url, category)
       `)
       .eq('user_id', userId)
-      .order('created_at', { ascending: false }); // Show newest items first
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error fetching cart:', error);
@@ -67,77 +67,60 @@ export default function CartDrawer({ open, onClose }: Props) {
       setCartItems(formattedCart);
     }
     setLoading(false);
-  };
+  }, [userId]); // Only recreate if userId changes (cartItems removed from dependency to prevent loops)
 
-  // 3. SAFE REALTIME SUBSCRIPTION
-  // This listens for changes ONLY when the drawer is open or the user exists.
+  // 3. Trigger Fetch on Open
   useEffect(() => {
-    // Only subscribe when we have a user and the drawer is open
-    if (!userId || !open) return;
+    if (open && userId) {
+      fetchUserCart();
+    }
+  }, [open, userId, fetchUserCart]);
 
-    // Initial fetch
-    fetchUserCart();
+  // 4. Realtime Subscription
+  useEffect(() => {
+    if (!userId) return;
 
-    // Create the channel
     const channel = supabase
-      .channel('cart_realtime')
+      .channel('cart_realtime_updates')
       .on(
         'postgres_changes',
         { 
           event: '*', 
           schema: 'public', 
           table: 'cart_items',
-          filter: `user_id=eq.${userId}` // 🔒 CRITICAL: Only listen to MY cart changes
+          filter: `user_id=eq.${userId}`
         },
         () => {
-          // When a change happens, re-fetch the data safely
           fetchUserCart();
         }
       )
       .subscribe();
 
-    // 🔒 CRITICAL: Destroy the channel when component unmounts or drawer closes
     return () => {
-      try {
-        supabase.removeChannel(channel);
-      } catch (err) {
-        // Defensive: log but don't throw during React cleanup
-        // eslint-disable-next-line no-console
-        console.warn('Failed to remove cart realtime channel', err);
-      }
+      supabase.removeChannel(channel);
     };
-  }, [userId, open]); // Re-run when userId or open changes
+  }, [userId, fetchUserCart]);
 
-
-  // --- ACTIONS (Update/Remove) ---
+  // --- ACTIONS ---
   const updateQuantity = async (cartId: string, currentQty: number, delta: number) => {
     const newQty = currentQty + delta;
     if (newQty < 1) return;
 
-    // Optimistic UI Update
+    // Optimistic Update (Instant UI change)
     setCartItems(prev => prev.map(item => 
       item.cart_id === cartId ? { ...item, quantity: newQty } : item
     ));
 
-    const { error } = await supabase
-      .from('cart_items')
-      .update({ quantity: newQty })
-      .eq('id', cartId);
-
-    if (error) {
-      fetchUserCart(); // Revert on error
-    }
+    // Database Update
+    await supabase.from('cart_items').update({ quantity: newQty }).eq('id', cartId);
   };
 
   const removeItem = async (cartId: string) => {
+    // Optimistic Update (Instant UI change)
     setCartItems(prev => prev.filter(item => item.cart_id !== cartId));
     
-    const { error } = await supabase
-      .from('cart_items')
-      .delete()
-      .eq('id', cartId);
-
-    if (error) console.error(error);
+    // Database Update
+    await supabase.from('cart_items').delete().eq('id', cartId);
   };
 
   const subtotal = cartItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);

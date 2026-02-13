@@ -1,22 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabaseClient } from '@/lib/supabaseClient';
 import Drawer from './Drawer';
 import Link from 'next/link';
-// We use standard <img> tags to avoid Runtime AbortErrors with next/image in drawers
 import { 
   Heart, 
   X, 
   PackageOpen, 
   MoveRight, 
   ShoppingCart, 
-  Loader2 
+  Loader2,
+  Trash2 // Using standard trash icon for remove
 } from 'lucide-react';
 
 type Props = { open: boolean; onClose: () => void };
 
-// Helper for Currency
 const formatPrice = (amount: number) => {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -32,7 +31,7 @@ export default function WishlistDrawer({ open, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // 1. SETUP USER ID ON MOUNT
+  // 1. Get User
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -41,11 +40,10 @@ export default function WishlistDrawer({ open, onClose }: Props) {
     getUser();
   }, []);
 
-  // 2. FETCH DATA FUNCTION
-  const fetchWishlist = async () => {
+  // 2. Fetch Function (Stable)
+  const fetchWishlist = useCallback(async () => {
     if (!userId) return;
     
-    // Only show loader on first load to prevent flickering
     if (wishlistItems.length === 0) setLoading(true);
 
     const { data, error } = await supabase
@@ -73,25 +71,28 @@ export default function WishlistDrawer({ open, onClose }: Props) {
       setWishlistItems(formatted);
     }
     setLoading(false);
-  };
+  }, [userId]); // Stable function
 
-  // 3. SAFE REALTIME LISTENER
-  // Updates instantly when items are added, but cleans up to prevent crashes
+  // 3. Trigger Fetch on Open
   useEffect(() => {
-    // Only subscribe when we have a user and the drawer is open
-    if (!userId || !open) return;
+    if (open && userId) {
+      fetchWishlist();
+    }
+  }, [open, userId, fetchWishlist]);
 
-    fetchWishlist();
+  // 4. Realtime Subscription
+  useEffect(() => {
+    if (!userId) return;
 
     const channel = supabase
-      .channel('wishlist_realtime')
+      .channel('wishlist_realtime_updates')
       .on(
         'postgres_changes',
         { 
           event: '*', 
           schema: 'public', 
           table: 'wishlist_items',
-          filter: `user_id=eq.${userId}` // 🔒 CRITICAL: Only listen to MY wishlist
+          filter: `user_id=eq.${userId}`
         },
         () => {
           fetchWishlist();
@@ -99,33 +100,22 @@ export default function WishlistDrawer({ open, onClose }: Props) {
       )
       .subscribe();
 
-    // 🔒 CRITICAL: Stop listening when component unmounts or drawer closes
     return () => {
-      try {
-        supabase.removeChannel(channel);
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn('Failed to remove wishlist realtime channel', err);
-      }
+      supabase.removeChannel(channel);
     };
-  }, [userId, open]);
+  }, [userId, fetchWishlist]);
 
   // --- ACTIONS ---
 
   const removeItem = async (wishlistId: string) => {
-    // Optimistic Update
     setWishlistItems(prev => prev.filter(item => item.wishlist_id !== wishlistId));
-    
-    await supabase
-      .from('wishlist_items')
-      .delete()
-      .eq('id', wishlistId);
+    await supabase.from('wishlist_items').delete().eq('id', wishlistId);
   };
 
   const moveToCart = async (item: any) => {
     if (!userId) return;
 
-    // 1. Add to Cart Table
+    // 1. Add to Cart
     const { error } = await supabase
       .from('cart_items')
       .insert([{
@@ -135,9 +125,8 @@ export default function WishlistDrawer({ open, onClose }: Props) {
       }]);
 
     if (!error) {
-      // 2. Remove from Wishlist if successful
+      // 2. Remove from Wishlist
       await removeItem(item.wishlist_id);
-      // Optional: You could trigger a toast notification here
     } else {
       console.error('Error moving to cart', error);
       alert('Could not move item to cart.');
@@ -146,7 +135,6 @@ export default function WishlistDrawer({ open, onClose }: Props) {
 
   return (
     <Drawer open={open} onClose={onClose} side="right" widthClass="w-full sm:w-[420px]">
-      
       {/* Header */}
       <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-white z-10">
         <div className="flex items-center gap-2.5">
@@ -197,7 +185,7 @@ export default function WishlistDrawer({ open, onClose }: Props) {
           <div className="p-6 space-y-6">
             {wishlistItems.map((item) => (
               <div key={item.wishlist_id} className="flex gap-4 group">
-                {/* Image - Using standard img to fix AbortError */}
+                {/* Image */}
                 <div className="h-28 w-24 flex-shrink-0 overflow-hidden rounded-lg border border-gray-100 bg-gray-50 relative">
                    {item.image ? (
                      /* eslint-disable-next-line @next/next/no-img-element */
@@ -209,7 +197,7 @@ export default function WishlistDrawer({ open, onClose }: Props) {
                    ) : (
                      <div className="h-full w-full flex items-center justify-center text-gray-300"><Heart size={24} /></div>
                    )}
-                   {/* Quick Remove Button Overlay */}
+                   {/* Remove Button */}
                    <button 
                      onClick={() => removeItem(item.wishlist_id)}
                      className="absolute top-1 right-1 p-1.5 bg-white/80 backdrop-blur-sm rounded-full text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"

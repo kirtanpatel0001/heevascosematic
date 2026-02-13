@@ -11,7 +11,8 @@ import {
   Users,
   Settings,
   LogOut,
-  Store, // <--- Imported Store Icon
+  Store,
+  Ticket, // <--- Imported Ticket Icon for Coupons
 } from 'lucide-react';
 
 export default async function AdminLayout({
@@ -64,7 +65,7 @@ export default async function AdminLayout({
               href="/admin/pos"
               className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-300 hover:bg-zinc-800 hover:text-white transition-colors"
             >
-              <Store size={18} /> {/* <--- POS Link Added Here */}
+              <Store size={18} />
               POS Terminal
             </Link>
 
@@ -74,6 +75,15 @@ export default async function AdminLayout({
             >
               <ShoppingBag size={18} />
               Orders
+            </Link>
+
+            {/* --- NEW COUPONS LINK --- */}
+            <Link
+              href="/admin/coupons"
+              className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-300 hover:bg-zinc-800 hover:text-white transition-colors"
+            >
+              <Ticket size={18} />
+              Coupons
             </Link>
 
             <Link

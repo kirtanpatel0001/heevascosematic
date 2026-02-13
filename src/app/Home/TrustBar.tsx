@@ -1,5 +1,4 @@
-"use client";
-
+// Removed "use client" -> This makes it a Server Component (Faster)
 import Image from "next/image";
 
 interface Feature {
@@ -29,11 +28,14 @@ const PromiseSection = () => {
               key={feature.id}
               className="flex flex-col items-center gap-6 group"
             >
+              {/* Icon Container */}
               <div className="relative w-16 h-16 md:w-20 md:h-20 opacity-80 transition-transform duration-500 group-hover:scale-110 group-hover:opacity-100">
                 <Image
                   src={feature.src}
                   alt={feature.label}
                   fill
+                  // PERFORMANCE FIX: Tells browser these are small icons
+                  sizes="(max-width: 768px) 64px, 80px"
                   className="object-contain"
                 />
               </div>

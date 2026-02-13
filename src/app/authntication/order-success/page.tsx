@@ -3,7 +3,6 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import dynamic from 'next/dynamic'; // <--- ADDED THIS
 import { 
   CheckCircle2, 
   ArrowRight, 
@@ -17,40 +16,44 @@ import {
   Store
 } from 'lucide-react';
 import { supabaseClient } from '@/lib/supabaseClient';
+import dynamic from 'next/dynamic';
 
-// --- DYNAMICALLY IMPORT PDF TOOLS (Prevents Server Crash) ---
-const InvoicePDF = dynamic(() => import('@/components/InvoicePDF'), { ssr: false });
+// --- DYNAMICALLY IMPORT PDF TO PREVENT CRASH ---
+// We use dynamic import for the renderer to avoid server-side execution
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then((mod) => mod.PDFDownloadLink),
-  { ssr: false, loading: () => <p className="text-xs text-white">Loading PDF...</p> }
+  { ssr: false, loading: () => <button className="w-full py-3 bg-gray-100 text-gray-400 rounded-lg font-bold text-sm">Loading PDF...</button> }
 );
+
+import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 
 /* ---------------- TYPES ---------------- */
 interface OrderItem {
   id: string;
   quantity: number;
   price: number;
+  product_id: string;
   product: {
     name: string;
     category: string;
+    image_url?: string;
   };
-}
-
-interface ShippingAddress {
-  firstName: string;
-  lastName: string;
-  phone: string;
-  address: string;
-  city: string;
-  pincode: string;
-  state?: string;
 }
 
 interface Order {
   id: string;
   created_at: string;
   total_amount: number;
-  shipping_address: ShippingAddress;
+  status: string;
+  payment_method: string;
+  shipping_address: {
+    firstName: string;
+    lastName: string;
+    address: string;
+    city: string;
+    pincode: string;
+    phone: string;
+  };
   items: OrderItem[];
 }
 
@@ -65,6 +68,72 @@ interface StoreSettings {
   free_shipping_threshold: number;
 }
 
+/* ---------------- PDF COMPONENT (YOUR CODE) ---------------- */
+const pdfStyles = StyleSheet.create({
+  page: { padding: 40, fontFamily: 'Helvetica', fontSize: 10, color: '#333' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 30, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 20 },
+  logoText: { fontSize: 20, fontWeight: 'bold', textTransform: 'uppercase' },
+  sectionTitle: { fontSize: 12, fontWeight: 'bold', marginBottom: 8, marginTop: 15 },
+  tableHeader: { flexDirection: 'row', backgroundColor: '#f9fafb', padding: 8, marginTop: 10, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  tableRow: { flexDirection: 'row', padding: 8, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  colProd: { flex: 3 },
+  colQty: { flex: 1, textAlign: 'center' },
+  colPrice: { flex: 1, textAlign: 'right' },
+  totalSection: { marginTop: 20, alignItems: 'flex-end' },
+});
+
+const InvoicePDF = ({ order, settings }: { order: Order, settings: StoreSettings }) => (
+  <Document>
+    <Page size="A4" style={pdfStyles.page}>
+       <View style={pdfStyles.header}>
+         <View>
+           <Text style={pdfStyles.logoText}>{settings.store_name}</Text>
+           <Text style={{fontSize: 9, color: '#666', marginTop: 4}}>{settings.support_email}</Text>
+         </View>
+         <View style={{alignItems: 'flex-end'}}>
+           <Text style={{fontSize: 16, fontWeight: 'bold'}}>INVOICE</Text>
+           <Text style={{marginTop: 4}}>#{order.id.slice(0,8).toUpperCase()}</Text>
+           <Text>{new Date(order.created_at).toLocaleDateString()}</Text>
+         </View>
+       </View>
+
+       <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
+        <View style={{width: '45%'}}>
+          <Text style={pdfStyles.sectionTitle}>Bill To:</Text>
+          <Text>{order.shipping_address.firstName} {order.shipping_address.lastName}</Text>
+          <Text>{order.shipping_address.address}</Text>
+          <Text>{order.shipping_address.city} - {order.shipping_address.pincode}</Text>
+          <Text>Tel: {order.shipping_address.phone}</Text>
+        </View>
+      </View>
+
+      <View>
+        <View style={pdfStyles.tableHeader}>
+          <Text style={pdfStyles.colProd}>Item</Text>
+          <Text style={pdfStyles.colQty}>Qty</Text>
+          <Text style={pdfStyles.colPrice}>Total</Text>
+        </View>
+        {order.items.map((item, i) => (
+          <View key={i} style={pdfStyles.tableRow}>
+            <Text style={pdfStyles.colProd}>{item.product.name}</Text>
+            <Text style={pdfStyles.colQty}>{item.quantity}</Text>
+            <Text style={pdfStyles.colPrice}>{settings.currency} {item.price * item.quantity}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={pdfStyles.totalSection}>
+        <View style={{width: 200}}>
+          <View style={{flexDirection: 'row', justifyContent: 'space-between', paddingTop: 5, borderTopWidth: 1}}>
+            <Text style={{fontWeight: 'bold'}}>Total Paid:</Text>
+            <Text style={{fontWeight: 'bold'}}>{settings.currency} {order.total_amount}</Text>
+          </View>
+        </View>
+      </View>
+    </Page>
+  </Document>
+);
+
 /* ---------------- ORDER SUCCESS CONTENT ---------------- */
 function OrderSuccessContent() {
   const searchParams = useSearchParams();
@@ -75,7 +144,7 @@ function OrderSuccessContent() {
   const [settings, setSettings] = useState<StoreSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isClient, setIsClient] = useState(false); 
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -133,25 +202,6 @@ function OrderSuccessContent() {
     );
   }
 
-  // --- CALCULATION LOGIC ---
-  const subtotal = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const taxAmount = (subtotal * settings.tax_rate) / 100;
-
-  // Shipping Logic
-  let shippingCost = settings.delivery_charge;
-  if (settings.free_shipping_threshold > 0 && subtotal >= settings.free_shipping_threshold) {
-      shippingCost = 0;
-  }
-
-  const grandTotal = subtotal + taxAmount + shippingCost;
-
-  const calculations = {
-      subtotal,
-      tax: taxAmount,
-      shipping: shippingCost,
-      grandTotal
-  };
-
   return (
     <main className="min-h-screen bg-gray-50 py-12 px-4 md:px-6 font-sans text-slate-900">
       <div className="max-w-4xl mx-auto">
@@ -199,26 +249,9 @@ function OrderSuccessContent() {
 
                  {/* PRICE BREAKDOWN */}
                  <div className="mt-6 pt-6 border-t border-gray-100 space-y-2">
-                    <div className="flex justify-between text-gray-600 text-sm">
-                       <span>Subtotal</span>
-                       <span>{settings.currency} {subtotal.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600 text-sm">
-                       <span>{settings.tax_name} ({settings.tax_rate}%)</span>
-                       <span>{settings.currency} {taxAmount.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-600 text-sm">
-                       <span>Shipping Charges</span>
-                       {shippingCost === 0 ? (
-                           <span className="text-emerald-600 font-bold">Free</span>
-                       ) : (
-                           <span>{settings.currency} {shippingCost.toFixed(2)}</span>
-                       )}
-                    </div>
-                    
                     <div className="flex justify-between text-xl font-black text-slate-900 pt-4 border-t border-gray-100 mt-4">
                        <span>Total Paid</span>
-                       <span>{settings.currency} {grandTotal.toFixed(2)}</span>
+                       <span>{settings.currency} {order.total_amount.toFixed(2)}</span>
                     </div>
                  </div>
               </div>
@@ -237,12 +270,12 @@ function OrderSuccessContent() {
                 
                 {isClient && (
                   <PDFDownloadLink
-                    document={<InvoicePDF order={order} settings={settings} calculations={calculations} />}
+                    document={<InvoicePDF order={order} settings={settings} />}
                     fileName={`invoice-${order.id.slice(0,6)}.pdf`}
                     className="w-full block"
                   >
                     {/* @ts-ignore */}
-                    {({ loading }: any) => (
+                    {({ loading }) => (
                       <button 
                         disabled={loading}
                         className="w-full flex items-center justify-center gap-2 bg-white text-black py-3 rounded-lg font-bold hover:bg-gray-200 transition"
@@ -304,7 +337,7 @@ function OrderSuccessContent() {
   );
 }
 
-/* ---------------- MAIN EXPORT ---------------- */
+/* ---------------- MAIN EXPORT (with Suspense wrapper) ---------------- */
 export default function OrderSuccessPage() {
   return (
     <Suspense fallback={

@@ -16,8 +16,8 @@ import { Toaster } from "sonner";
 const playfair = Playfair_Display({ subsets: ["latin"] });
 const montserrat = Montserrat({ subsets: ["latin"] });
 
-// Force dynamic rendering so reviews/stock are always fresh
-export const revalidate = 0; 
+// CACHING ENABLED (Fast load)
+export const revalidate = 60; 
 
 export async function generateStaticParams() {
   const supabase = getStaticSupabase();
@@ -43,14 +43,23 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   if (error || !product) return notFound();
 
-  // 2. Fetch Related Products
-  let { data: relatedProducts } = await supabase
-    .from('products')
-    .select('id, name, price, image_url, category')
-    .eq('category', product.category)
-    .neq('id', product.id);
+  // 2. Parallel Fetching (Fast data)
+  const [relatedRes, reviewsRes] = await Promise.all([
+    supabase
+      .from('products')
+      .select('id, name, price, image_url, category')
+      .eq('category', product.category)
+      .neq('id', product.id)
+      .limit(8),
+    supabase
+      .from('reviews')
+      .select('*')
+      .eq('product_id', id)
+      .order('created_at', { ascending: false })
+  ]);
 
-  if (!relatedProducts || relatedProducts.length === 0) {
+  let relatedProducts = relatedRes.data || [];
+  if (relatedProducts.length === 0) {
     const { data: allProducts } = await supabase
       .from('products')
       .select('id, name, price, image_url, category')
@@ -59,16 +68,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
     relatedProducts = allProducts || [];
   }
 
-  // 3. FETCH REVIEWS & CALCULATE STATS
-  const { data: reviews } = await supabase
-    .from('reviews')
-    .select('*')
-    .eq('product_id', id)
-    .order('created_at', { ascending: false });
-
-  const totalReviews = reviews?.length || 0;
+  const reviews = reviewsRes.data || [];
+  const totalReviews = reviews.length;
   const averageRating = totalReviews > 0
-    ? reviews!.reduce((acc, review) => acc + review.rating, 0) / totalReviews
+    ? reviews.reduce((acc, review) => acc + review.rating, 0) / totalReviews
     : 0;
   const formattedRating = Number(averageRating.toFixed(1));
 
@@ -79,28 +82,16 @@ export default async function ProductPage({ params }: ProductPageProps) {
     ? product.images 
     : (product.image_url ? [product.image_url] : []);
 
-  // --- PREPARE DATA FOR SECTIONS ---
-  
-  // A. Usage Steps (How to Use) - Ensure array safety
   const usageSteps = Array.isArray(product.usage_steps) ? product.usage_steps : [];
-  
-  // B. Before/After Visibility - Only show if both exist
   const showBeforeAfter = product.before_image && product.after_image;
 
-  // C. Tab Data (The new dynamic part)
   const tabData = {
     description: product.description || "",
     ingredients: product.ingredients || "",
-    
-    // Pass the comparison arrays (Default to empty array if null to fix crash)
     whyChooseData: Array.isArray(product.why_choose_data) ? product.why_choose_data : [],
     additionalInfoData: Array.isArray(product.additional_info_data) ? product.additional_info_data : [],
-    
-    // Pass Comparison Images (Fall back to main image for "Our Product" if specific one not uploaded)
     productImage: product.comparison_our_image || product.image_url, 
     otherImage: product.comparison_other_image || null,
-    
-    // Pass Info Tab Image
     additionalInfoImage: product.additional_info_image || null
   };
 
@@ -127,6 +118,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           
           {/* LEFT: GALLERY */}
           <div className="w-full lg:col-span-7 relative z-0 mb-8 lg:mb-0 lg:sticky lg:top-10">
+            {/* TIP: Ensure the first <Image> inside GalleryClient has priority={true} */}
             <GalleryClient images={galleryImages} name={product.name} />
           </div>
 
@@ -140,11 +132,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
         </div>
       </div>
 
-      {/* --- SECTION: PRODUCT TABS (Dynamic Description, Comparison, Info) --- */}
+      {/* --- SECTION: PRODUCT TABS --- */}
       <ProductTabs {...tabData} />
 
-      {/* --- SECTION: HOW TO USE (Dynamic) --- */}
-      {/* Only render if we have steps added in Admin */}
+      {/* --- SECTION: HOW TO USE (OPTIMIZED IMAGES) --- */}
       {usageSteps.length > 0 && usageSteps[0]?.title && (
         <div className="w-full bg-zinc-50 py-16 md:py-24 my-10 border-t border-zinc-100">
             <div className="max-w-[1440px] mx-auto px-6">
@@ -160,15 +151,16 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
                     {usageSteps.map((step: any, index: number) => (
                         <div key={index} className="flex flex-col items-center text-center group">
-                            {/* Step Image */}
                             <div className="relative w-full aspect-square md:aspect-[4/5] overflow-hidden rounded-lg mb-6 shadow-sm bg-white border border-zinc-100">
                                 {step.image ? (
                                     <Image 
                                         src={step.image} 
                                         alt={step.title}
                                         fill
+                                        // 1. Removed unoptimized={true}
+                                        // 2. Added sizes to download smaller images on mobile
+                                        sizes="(max-width: 768px) 100vw, 33vw"
                                         className="object-cover transition-transform duration-700 group-hover:scale-105"
-                                        unoptimized={true}
                                     />
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center bg-zinc-50 text-zinc-300">
@@ -177,13 +169,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
                                 )}
                                 
                                 <div className="absolute inset-0 bg-black/5" />
-                                {/* Step Number Badge */}
                                 <div className="absolute top-4 left-4 w-8 h-8 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-xs font-bold font-serif shadow-sm">
                                     {index + 1}
                                 </div>
                             </div>
 
-                            {/* Step Text */}
                             <h3 className={`${playfair.className} text-xl font-bold mb-2`}>{step.title}</h3>
                             <p className="text-zinc-600 text-sm leading-relaxed max-w-[250px]">
                                 {step.text}
@@ -195,12 +185,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
         </div>
       )}
 
-      {/* --- SECTION: BEFORE & AFTER SLIDER (Dynamic) --- */}
-      {/* Only render if BOTH images are uploaded in Admin */}
+      {/* --- SECTION: BEFORE & AFTER SLIDER --- */}
       {showBeforeAfter && (
           <div className="max-w-[1440px] mx-auto px-6 mb-20">
              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-                {/* Left Side: Text */}
                 <div className="order-2 lg:order-1">
                     <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500 mb-3 block">
                        Real Results
@@ -224,7 +212,6 @@ export default async function ProductPage({ params }: ProductPageProps) {
                     </div>
                 </div>
 
-                {/* Right Side: Slider */}
                 <div className="order-1 lg:order-2 w-full h-full flex items-center justify-center">
                     <div className="w-full max-w-xl shadow-2xl rounded-lg">
                         <BeforeAfterSlider 
@@ -246,7 +233,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
       {/* --- DIVIDER --- */}
       <div className="w-full h-px bg-zinc-200 my-16 md:my-24 px-6 mx-auto"></div>
 
-      {/* --- RELATED PRODUCTS --- */}
+      {/* --- RELATED PRODUCTS (OPTIMIZED IMAGES) --- */}
       {relatedProducts && relatedProducts.length > 0 ? (
         <div className="max-w-[1440px] mx-auto px-6 md:px-8 mb-20">
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
@@ -269,8 +256,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
                             src={item.image_url} 
                             alt={item.name} 
                             fill 
+                            // 1. Removed unoptimized={true}
+                            // 2. Added sizes for performance
+                            sizes="(max-width: 768px) 50vw, 25vw"
                             className="object-contain p-0 transition-transform duration-700 group-hover:scale-105" 
-                            unoptimized={true}
                          />
                       ) : (
                          <div className="w-full h-full flex items-center justify-center text-zinc-300 bg-zinc-50">

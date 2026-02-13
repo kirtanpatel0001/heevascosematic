@@ -2,11 +2,12 @@
 
 import React, { useState, FC } from 'react'
 import Image from 'next/image'
-import { Facebook, Instagram, Twitter, Youtube } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { Facebook, Instagram } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { FiCheck, FiX } from 'react-icons/fi'
 
-// Updated data based on instructions
+// Updated data
+// Updated data with WORKING Google Maps Links
 const locations = {
   'SURAT': {
     label: 'SURAT (EXHUB)',
@@ -18,7 +19,8 @@ const locations = {
       'Surat - 395002'
     ],
     email: 'support@heevas.com',
-    mapSrc: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1094.9510383522495!2d72.76696007628323!3d21.147968126450372!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3be04d0682ebe67b%3A0xc936b411fc9755c6!2sHeevas%20Cosmetics!5e0!3m2!1sen!2sin!4v1768922872867!5m2!1sen!2sin"
+    // FIXED: Real Map Link for Doctor Ni Wadi, Surat
+    mapSrc: "https://maps.google.com/maps?q=5,+Doctor+Ni+Wadi,+Behind+Krishna+Petrol+Pump,+Khatodra,+Udhna,+Surat&t=&z=15&ie=UTF8&iwloc=&output=embed"
   },
   'MOTA VARACHA': {
     label: 'MOTA VARACHA',
@@ -30,7 +32,8 @@ const locations = {
       'Surat, Gujarat 394101'
     ],
     email: 'support@heevas.com',
-    mapSrc: "https://www.google.com/maps/embed?pb=!1m14!1m8!1m3!1d1138.7576957277843!2d72.8757367404131!3d21.234437470769628!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3be04f75e005ee1f%3A0xe18ab41f7f3c5f5d!2sSumeru%20City%20Mall!5e1!3m2!1sen!2sin!4v1767933013748!5m2!1sen!2sin"
+    // FIXED: Real Map Link for Sumeru City Mall
+    mapSrc: "https://maps.google.com/maps?q=Sumeru+City+Mall,+Sudama+Chowk,+Mota+Varachha,+Surat&t=&z=15&ie=UTF8&iwloc=&output=embed"
   }
 }
 
@@ -41,34 +44,36 @@ const Toast: FC<{
   message: string
   onClose: () => void
 }> = ({ show, type, message, onClose }) => {
-  if (!show) return null
-  
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -50, x: "-50%" }}
-      animate={{ opacity: 1, y: 0, x: "-50%" }}
-      exit={{ opacity: 0, y: -50, x: "-50%" }}
-      className={`fixed top-6 left-1/2 transform -translate-x-1/2 z-50 px-6 py-4 rounded-lg shadow-xl border backdrop-blur-md ${
-        type === 'success' 
-          ? 'bg-emerald-50 text-emerald-900 border-emerald-300' 
-          : 'bg-red-50 text-red-900 border-red-300'
-      }`}
-    >
-      <div className="flex items-center space-x-3">
-        {type === 'success' ? (
-          <FiCheck className="w-5 h-5 text-emerald-600" />
-        ) : (
-          <FiX className="w-5 h-5 text-red-600" />
-        )}
-        <span className="font-medium text-sm">{message}</span>
-        <button
-          onClick={onClose}
-          className="ml-4 hover:opacity-75 transition-opacity"
+    <AnimatePresence>
+      {show && (
+        <motion.div
+          initial={{ opacity: 0, y: -50, x: "-50%" }}
+          animate={{ opacity: 1, y: 0, x: "-50%" }}
+          exit={{ opacity: 0, y: -50, x: "-50%" }}
+          className={`fixed top-6 left-1/2 transform -translate-x-1/2 z-50 px-6 py-4 rounded-lg shadow-xl border backdrop-blur-md ${
+            type === 'success' 
+              ? 'bg-emerald-50 text-emerald-900 border-emerald-300' 
+              : 'bg-red-50 text-red-900 border-red-300'
+          }`}
         >
-          <FiX className={`w-4 h-4 ${type === 'success' ? 'text-emerald-600' : 'text-red-600'}`} />
-        </button>
-      </div>
-    </motion.div>
+          <div className="flex items-center space-x-3">
+            {type === 'success' ? (
+              <FiCheck className="w-5 h-5 text-emerald-600" />
+            ) : (
+              <FiX className="w-5 h-5 text-red-600" />
+            )}
+            <span className="font-medium text-sm">{message}</span>
+            <button
+              onClick={onClose}
+              className="ml-4 hover:opacity-75 transition-opacity"
+            >
+              <FiX className={`w-4 h-4 ${type === 'success' ? 'text-emerald-600' : 'text-red-600'}`} />
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
 
@@ -81,7 +86,7 @@ export default function ContactPage() {
   
   const currentData = locations[activeTab]
 
-  // Handle form submission with FormSubmit.co
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsSubmitting(true)
@@ -90,38 +95,43 @@ export default function ContactPage() {
       const form = e.target as HTMLFormElement
       const formData = new FormData(form)
       
-      // Add FormSubmit configuration
-      formData.append('_captcha', 'false')
-      formData.append('_subject', 'New Contact Form Submission from Website')
-      formData.append('_template', 'table')
-      
-      // Submit to FormSubmit
-      const response = await fetch('https://formsubmit.co/heevascosmetics@gmail.com', {
+      // Convert FormData to JSON for better reliability
+      const data = Object.fromEntries(formData.entries());
+
+      // Submit to FormSubmit (Using JSON endpoint for real error handling)
+      const response = await fetch('https://formsubmit.co/ajax/heevascosmetics@gmail.com', {
         method: 'POST',
-        body: formData,
-        mode: 'no-cors'
+        headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+            ...data,
+            _subject: 'New Contact Form Submission',
+            _captcha: 'false'
+        })
       })
       
-      // Show success message
-      setShowToast(true);
-      setToastType('success');
-      setToastMessage("Thank you for reaching out! Your message has been received and we'll respond shortly.");
-      
-      // Reset form
-      (e.target as HTMLFormElement).reset()
+      const result = await response.json();
+
+      if (response.ok) {
+          setShowToast(true);
+          setToastType('success');
+          setToastMessage("Thank you! Your message has been sent successfully.");
+          form.reset();
+      } else {
+          throw new Error(result.message || 'Something went wrong');
+      }
       
     } catch (error) {
       console.error('Form submission error:', error)
       setShowToast(true)
       setToastType('error')
-      setToastMessage('Failed to send message. Please try again or contact us directly.')
+      setToastMessage('Failed to send message. Please try again.')
     } finally {
       setIsSubmitting(false)
-      // Hide toast after 5 seconds
       setTimeout(() => {
         setShowToast(false)
-        setToastType('')
-        setToastMessage('')
       }, 5000)
     }
   }
@@ -129,12 +139,11 @@ export default function ContactPage() {
   return (
     <div className="min-h-screen bg-[#f7f7f7] font-sans">
       
-      {/* Toast Notification */}
       <Toast 
         show={showToast} 
         type={toastType} 
         message={toastMessage} 
-        onClose={() => { setShowToast(false); setToastType(''); setToastMessage('') }}
+        onClose={() => setShowToast(false)}
       />
       
       {/* 1. LOCATION TABS */}
@@ -221,17 +230,20 @@ export default function ContactPage() {
           {/* Left: Image */}
           <div className="w-full md:w-1/2 relative bg-gray-100 min-h-[300px] md:min-h-full">
             <Image 
-              src="/imges/gg.jpg" 
+              src="/imges/gg.jpg" // NOTE: Ensure folder is named 'imges' or 'images'
               alt="Cosmetic bottle with flowers"
               fill
+              // PERFORMANCE FIX: This tells mobile to download small version, Desktop large version
+              sizes="(max-width: 768px) 100vw, 50vw" 
               className="object-cover"
+              priority={false} // Lazy load since it's at the bottom
             />
           </div>
 
           {/* Right: Form */}
           <div className="w-full md:w-1/2 p-12 lg:p-16 flex flex-col justify-center">
             <h2 className="text-xl font-medium tracking-widest uppercase mb-10 text-gray-800">
-              Send your question us
+               Send Us Your Question
             </h2>
 
             <form onSubmit={handleSubmit} className="space-y-4">
