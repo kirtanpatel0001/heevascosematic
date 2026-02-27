@@ -1,9 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Drawer from './Drawer';
 import Link from 'next/link';
-import { ShoppingBag, X, ArrowRight, ShoppingCart, Minus, Plus, Trash2, Loader2 } from 'lucide-react';
+import Image from 'next/image';
+import {
+  ShoppingBag, X, ArrowRight, ShoppingCart,
+  Minus, Plus, Trash2, Loader2
+} from 'lucide-react';
 import { supabaseClient } from '@/lib/supabaseClient';
 
 type Props = {
@@ -25,7 +29,9 @@ export default function CartDrawer({ open, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // 1. Get User
+  const isFetching = useRef(false);
+
+  // 1. Get User once on mount
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -34,12 +40,12 @@ export default function CartDrawer({ open, onClose }: Props) {
     getUser();
   }, []);
 
-  // 2. Fetch Function (Wrapped in useCallback to be stable)
-  const fetchUserCart = useCallback(async () => {
-    if (!userId) return;
-    
-    // Only show spinner if we have NO items. If we have items, just update silently.
-    if (cartItems.length === 0) setLoading(true);
+  // 2. Fetch cart from DB
+  const fetchUserCart = useCallback(async (showSpinner = false) => {
+    if (!userId || isFetching.current) return;
+
+    isFetching.current = true;
+    if (showSpinner) setLoading(true);
 
     const { data, error } = await supabase
       .from('cart_items')
@@ -50,48 +56,55 @@ export default function CartDrawer({ open, onClose }: Props) {
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching cart:', error);
-    } else {
-      const formattedCart = data.map((item: any) => ({
+    if (!error && data) {
+      const formatted = data.map((item: any) => ({
         cart_id: item.id,
-        product_id: item.product.id,
-        name: item.product.name,
-        price: item.product.price,
-        image: item.product.image_url,
-        category: item.product.category,
+        product_id: item.product?.id,
+        name: item.product?.name,
+        price: item.product?.price,
+        image: item.product?.image_url,
+        category: item.product?.category,
         quantity: item.quantity,
         size: item.size,
-        color: item.color
+        color: item.color,
       }));
-      setCartItems(formattedCart);
+      setCartItems(formatted);
     }
-    setLoading(false);
-  }, [userId]); // Only recreate if userId changes (cartItems removed from dependency to prevent loops)
 
-  // 3. Trigger Fetch on Open
+    isFetching.current = false;
+    setLoading(false);
+  }, [userId, supabase]);
+
+  // 3. Fetch when userId becomes available
+  useEffect(() => {
+    if (userId) {
+      fetchUserCart(cartItems.length === 0);
+    }
+  }, [userId]);
+
+  // 4. Re-fetch every time drawer opens
   useEffect(() => {
     if (open && userId) {
-      fetchUserCart();
+      fetchUserCart(cartItems.length === 0);
     }
-  }, [open, userId, fetchUserCart]);
+  }, [open, userId]);
 
-  // 4. Realtime Subscription
+  // 5. Realtime subscription
   useEffect(() => {
     if (!userId) return;
 
     const channel = supabase
-      .channel('cart_realtime_updates')
+      .channel(`cart_drawer_${userId}`)
       .on(
         'postgres_changes',
-        { 
-          event: '*', 
-          schema: 'public', 
+        {
+          event: '*',
+          schema: 'public',
           table: 'cart_items',
-          filter: `user_id=eq.${userId}`
+          filter: `user_id=eq.${userId}`,
         },
         () => {
-          fetchUserCart();
+          fetchUserCart(false);
         }
       )
       .subscribe();
@@ -99,46 +112,87 @@ export default function CartDrawer({ open, onClose }: Props) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, fetchUserCart]);
+  }, [userId, fetchUserCart, supabase]);
 
   // --- ACTIONS ---
+
   const updateQuantity = async (cartId: string, currentQty: number, delta: number) => {
     const newQty = currentQty + delta;
     if (newQty < 1) return;
 
-    // Optimistic Update (Instant UI change)
-    setCartItems(prev => prev.map(item => 
-      item.cart_id === cartId ? { ...item, quantity: newQty } : item
-    ));
+    // Optimistic update
+    setCartItems(prev =>
+      prev.map(item =>
+        item.cart_id === cartId ? { ...item, quantity: newQty } : item
+      )
+    );
 
-    // Database Update
-    await supabase.from('cart_items').update({ quantity: newQty }).eq('id', cartId);
+    const { error } = await supabase
+      .from('cart_items')
+      .update({ quantity: newQty })
+      .eq('id', cartId)
+      .eq('user_id', userId);
+
+    if (error) {
+      // Revert on failure
+      setCartItems(prev =>
+        prev.map(item =>
+          item.cart_id === cartId ? { ...item, quantity: currentQty } : item
+        )
+      );
+    }
   };
 
   const removeItem = async (cartId: string) => {
-    // Optimistic Update (Instant UI change)
+    // Optimistic remove
+    const removed = cartItems.find(item => item.cart_id === cartId);
     setCartItems(prev => prev.filter(item => item.cart_id !== cartId));
-    
-    // Database Update
-    await supabase.from('cart_items').delete().eq('id', cartId);
+
+    const { error } = await supabase
+      .from('cart_items')
+      .delete()
+      .eq('id', cartId)
+      .eq('user_id', userId);
+
+    if (error && removed) {
+      setCartItems(prev => [...prev, removed]);
+    }
   };
 
-  const subtotal = cartItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+  const subtotal = cartItems.reduce(
+    (acc, item) => acc + item.price * item.quantity, 0
+  );
+
+  const totalItems = cartItems.reduce(
+    (acc, item) => acc + item.quantity, 0
+  );
 
   return (
-    <Drawer open={open} onClose={onClose} side="right" widthClass="w-full sm:w-[420px]" ariaLabel="Cart">
+    <Drawer
+      open={open}
+      onClose={onClose}
+      side="right"
+      widthClass="w-full sm:w-[420px]"
+      ariaLabel="Cart"
+    >
       {/* Header */}
       <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-white z-10">
         <div className="flex items-center gap-3">
           <div className="relative">
             <ShoppingBag size={22} className="text-gray-900" />
-            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-black text-[10px] font-medium text-white">
-              {cartItems.reduce((acc, item) => acc + item.quantity, 0)}
-            </span>
+            {totalItems > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-black text-[10px] font-medium text-white">
+                {totalItems}
+              </span>
+            )}
           </div>
           <h3 className="text-xl text-black font-semibold tracking-tight">Your Cart</h3>
         </div>
-        <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+        <button
+          onClick={onClose}
+          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          aria-label="Close cart"
+        >
           <X color="black" size={20} />
         </button>
       </div>
@@ -146,9 +200,9 @@ export default function CartDrawer({ open, onClose }: Props) {
       {/* Body */}
       <div className="flex-1 overflow-y-auto">
         {loading && cartItems.length === 0 ? (
-           <div className="h-full flex items-center justify-center">
-             <Loader2 className="animate-spin text-gray-400" size={32} />
-           </div>
+          <div className="h-full flex items-center justify-center">
+            <Loader2 className="animate-spin text-gray-400" size={32} />
+          </div>
         ) : cartItems.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center p-8 text-center">
             <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-gray-50">
@@ -158,8 +212,8 @@ export default function CartDrawer({ open, onClose }: Props) {
             <p className="text-gray-500 max-w-[280px] mb-8 leading-relaxed">
               Looks like you haven&apos;t added anything to your cart yet.
             </p>
-            <Link 
-              href="/authntication/shop" 
+            <Link
+              href="/shop"
               onClick={onClose}
               className="group flex items-center gap-2 bg-black text-white px-8 py-3 rounded-full font-medium hover:bg-zinc-800 transition-all active:scale-95"
             >
@@ -171,12 +225,17 @@ export default function CartDrawer({ open, onClose }: Props) {
           <div className="p-6 space-y-6">
             {cartItems.map((item) => (
               <div key={item.cart_id} className="flex gap-4 group">
-                <div className="h-24 w-20 flex-shrink-0 overflow-hidden rounded-md border border-gray-200 bg-gray-50">
+                <div className="h-24 w-20 flex-shrink-0 overflow-hidden rounded-md border border-gray-200 bg-gray-50 relative">
                   {item.image ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img src={item.image} alt={item.name} className="h-full w-full object-cover object-center" />
+                    <Image
+                      src={item.image}
+                      alt={item.name}
+                      fill
+                      sizes="80px"
+                      className="object-cover object-center"
+                    />
                   ) : (
-                    <div className="h-full w-full flex items-center justify-center bg-gray-100 text-gray-400">
+                    <div className="h-full w-full flex items-center justify-center text-gray-400">
                       <ShoppingBag size={20} />
                     </div>
                   )}
@@ -186,10 +245,16 @@ export default function CartDrawer({ open, onClose }: Props) {
                   <div className="flex justify-between items-start">
                     <div>
                       <h3 className="text-sm font-medium text-gray-900 line-clamp-1">
-                        <Link href={`/product/${item.product_id}`} onClick={onClose}>{item.name}</Link>
+                        <Link
+                          href={`/product/${item.product_id}`}
+                          onClick={onClose}
+                          className="hover:underline"
+                        >
+                          {item.name}
+                        </Link>
                       </h3>
                       <p className="mt-1 text-xs text-gray-500">
-                        {item.size ? `Size: ${item.size}` : item.category} 
+                        {item.size ? `Size: ${item.size}` : item.category}
                         {item.color && ` / ${item.color}`}
                       </p>
                     </div>
@@ -200,24 +265,29 @@ export default function CartDrawer({ open, onClose }: Props) {
 
                   <div className="flex items-center justify-between mt-2">
                     <div className="flex items-center border border-gray-300 rounded-full h-8 px-2 gap-3">
-                      <button 
+                      <button
                         onClick={() => updateQuantity(item.cart_id, item.quantity, -1)}
-                        className="text-gray-500 hover:text-black disabled:opacity-30"
                         disabled={item.quantity <= 1}
+                        className="text-gray-500 hover:text-black disabled:opacity-30 transition-colors"
+                        aria-label="Decrease quantity"
                       >
                         <Minus size={12} />
                       </button>
-                      <span className="text-xs font-medium w-3 text-center">{item.quantity}</span>
-                      <button 
+                      <span className="text-xs font-medium w-3 text-center">
+                        {item.quantity}
+                      </span>
+                      <button
                         onClick={() => updateQuantity(item.cart_id, item.quantity, 1)}
-                        className="text-gray-500 hover:text-black"
+                        className="text-gray-500 hover:text-black transition-colors"
+                        aria-label="Increase quantity"
                       >
                         <Plus size={12} />
                       </button>
                     </div>
-                    <button 
+                    <button
                       onClick={() => removeItem(item.cart_id)}
                       className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                      aria-label="Remove item"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -229,18 +299,20 @@ export default function CartDrawer({ open, onClose }: Props) {
         )}
       </div>
 
+      {/* Footer */}
       {cartItems.length > 0 && (
         <div className="border-t border-gray-100 p-6 bg-white space-y-4">
           <div className="flex justify-between items-center text-base font-medium text-gray-900">
             <p>Subtotal</p>
             <p>{formatPrice(subtotal)}</p>
           </div>
+          {/* ✅ Fixed path to match actual folder: authntication/checkout */}
           <Link
             href="/authntication/checkout"
             onClick={onClose}
             className="w-full bg-black text-white flex items-center justify-center rounded-full py-4 px-6 text-sm font-bold shadow-lg hover:bg-zinc-800 transition-all active:scale-95"
           >
-            Checkout -   {formatPrice(subtotal)}
+            Checkout — {formatPrice(subtotal)}
           </Link>
         </div>
       )}

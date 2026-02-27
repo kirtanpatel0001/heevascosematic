@@ -12,6 +12,7 @@ const HeevasUsingSection = () => {
       product: "Varnika Veda Hair Oil",
       desc: "Apply to roots and massage gently. Leave overnight or 1 hour before washing.",
       color: "from-amber-100 to-amber-50",
+      video: "https://www.w3schools.com/html/mov_bbb.mp4", // Replace with your .mp4 URL
     },
     {
       id: 2,
@@ -20,8 +21,8 @@ const HeevasUsingSection = () => {
       product: "Misilk Shine / Argan Lavish Cleanser",
       desc: "Gently lather to cleanse without stripping natural oils.",
       color: "from-blue-100 to-blue-50",
+      video: "https://www.w3schools.com/html/mov_bbb.mp4", // Replace with your .mp4 URL
     },
-    
     {
       id: 3,
       step: "03",
@@ -29,6 +30,7 @@ const HeevasUsingSection = () => {
       product: "Argan Lavish Scalp Conditioner",
       desc: "Seal moisture and smooth the cuticle. Rinse with cool water.",
       color: "from-purple-100 to-purple-50",
+      video: "https://www.w3schools.com/html/mov_bbb.mp4", // Replace with your .mp4 URL
     },
     {
       id: 4,
@@ -37,6 +39,7 @@ const HeevasUsingSection = () => {
       product: "Argan Blossom Hair Mask",
       desc: "Apply mid-length to ends. Leave for 15 minutes.",
       color: "from-rose-100 to-rose-50",
+      video: "https://www.w3schools.com/html/mov_bbb.mp4", // Replace with your .mp4 URL
     },
   ];
 
@@ -58,10 +61,9 @@ const HeevasUsingSection = () => {
 
         {/* Timeline */}
         <div className="relative">
-          {/* Spine - Hidden on Mobile to prevent overlap, Visible on Desktop */}
           <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-[2px] bg-gray-200 -translate-x-1/2" />
 
-          <div className="space-y-8 md:space-y-24">
+          <div className="space-y-12 md:space-y-24">
             {steps.map((item, index) => {
               const isLeft = index % 2 === 0;
 
@@ -72,28 +74,19 @@ const HeevasUsingSection = () => {
                   whileInView={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6 }}
                   viewport={{ once: true }}
-                  // Changed grid logic slightly to prevent gaps on mobile
-                  className="relative grid grid-cols-1 md:grid-cols-2 items-center"
+                  className="relative grid grid-cols-1 md:grid-cols-2 items-center gap-8 md:gap-0"
                 >
                   {/* LEFT */}
-                  {isLeft ? (
-                    <div className="md:pr-12">
-                      <Card item={item} />
-                    </div>
-                  ) : null}
+                  <div className={`order-2 ${isLeft ? 'md:order-1 md:pr-12' : 'md:order-3 md:pl-12 hidden md:block'}`}>
+                    {isLeft && <Card item={item} />}
+                  </div>
 
-                  {/* Spacer - Hidden on Mobile */}
-                  <div className="hidden md:block" />
+                  {/* Spacer / Right */}
+                  <div className={`order-2 ${!isLeft ? 'md:order-3 md:pl-12' : 'md:order-1 md:pr-12 hidden md:block'}`}>
+                    {!isLeft && <Card item={item} />}
+                  </div>
 
-                  {/* RIGHT */}
-                  {!isLeft ? (
-                    <div className="md:pl-12">
-                      <Card item={item} />
-                    </div>
-                  ) : null}
-
-                  {/* Step Dot - CENTRAL (Desktop Only) */}
-                  {/* Added 'hidden md:flex' so this DOES NOT show on mobile */}
+                  {/* Step Dot */}
                   <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 w-12 h-12 rounded-full bg-black text-white items-center justify-center font-bold border-4 border-white shadow-lg z-10">
                     {item.step}
                   </div>
@@ -107,19 +100,28 @@ const HeevasUsingSection = () => {
   );
 };
 
-const Card = ({ item }: any) => (
-  <div className="relative rounded-2xl shadow-xl bg-white border border-gray-100 overflow-hidden">
+const Card = ({ item }: { item: any }) => (
+  <div className="relative rounded-2xl shadow-xl bg-white border border-gray-100 overflow-hidden group">
     
-    {/* STEP NUMBER – MOBILE ONLY (Top Right Corner) */}
-    {/* This will show on mobile, while the central dot is hidden */}
     <div className="md:hidden absolute top-4 right-4 w-10 h-10 rounded-full bg-black text-white flex items-center justify-center text-sm font-bold shadow-md z-20">
       {item.step}
     </div>
 
-    {/* Visual Block */}
-   
+    {/* Visual Block - VIDEO */}
+    <div className="relative h-64 w-full overflow-hidden bg-gray-100">
+      <video 
+        src={item.video} 
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="object-cover w-full h-full transition-transform duration-700 group-hover:scale-105"
+      />
+      {/* Subtle color overlay based on step */}
+      <div className={`absolute inset-0 bg-gradient-to-tr opacity-20 mix-blend-multiply pointer-events-none ${item.color}`} />
+    </div>
 
-    <div className="p-6">
+    <div className="p-6 md:p-8">
       <span className="text-xs tracking-widest uppercase text-gray-400 block mb-2">
         {item.title}
       </span>

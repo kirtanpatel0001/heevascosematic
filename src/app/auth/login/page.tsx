@@ -30,7 +30,7 @@ export default function LoginPage() {
     setError('');
 
     try {
-      // 1️⃣ Login
+      // 1️⃣ Sign in
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -40,19 +40,18 @@ export default function LoginPage() {
 
       const user = data.user;
 
-      // 2️⃣ EMAIL VERIFICATION CHECK (MANDATORY)
+      // 2️⃣ Email verification check
       if (!user?.email_confirmed_at) {
-        // Re-send verification email
         await supabase.auth.resend({
           type: 'signup',
           email,
         });
-
         router.push('/auth/verify');
         return;
       }
 
-      // 3️⃣ FETCH ROLE FROM PROFILES (SAFE)
+      // 3️⃣ Fetch role for UI redirect only
+      // Real protection is handled by middleware
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
@@ -61,7 +60,7 @@ export default function LoginPage() {
 
       if (profileError) throw profileError;
 
-      // 4️⃣ ROLE-BASED REDIRECT (NAVIGATION ONLY)
+      // 4️⃣ Redirect based on role (UI only — middleware enforces real protection)
       if (profile.role === 'admin') {
         router.push('/admin');
       } else {
@@ -88,9 +87,7 @@ export default function LoginPage() {
             <Sparkles size={18} />
           </div>
           <h1 className="text-2xl font-bold">Welcome Back</h1>
-          <p className="text-sm text-gray-500 mt-2">
-            Sign in to your account
-          </p>
+          <p className="text-sm text-gray-500 mt-2">Sign in to your account</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -99,13 +96,16 @@ export default function LoginPage() {
               Email
             </label>
             <div className="relative mt-1">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <Mail
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                size={18}
+              />
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border rounded-lg text-sm focus:ring-2 focus:ring-black"
+                className="w-full pl-10 pr-4 py-3 border rounded-lg text-sm focus:ring-2 focus:ring-black focus:outline-none"
               />
             </div>
           </div>
@@ -115,18 +115,24 @@ export default function LoginPage() {
               <label className="text-xs font-semibold text-gray-700 uppercase">
                 Password
               </label>
-              <Link href="/auth/forgot-password" className="text-xs text-gray-500 hover:underline">
+              <Link
+                href="/auth/forgot-password"
+                className="text-xs text-gray-500 hover:underline"
+              >
                 Forgot?
               </Link>
             </div>
             <div className="relative mt-1">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <Lock
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                size={18}
+              />
               <input
                 type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-10 py-3 border rounded-lg text-sm focus:ring-2 focus:ring-black"
+                className="w-full pl-10 pr-10 py-3 border rounded-lg text-sm focus:ring-2 focus:ring-black focus:outline-none"
               />
               <button
                 type="button"
@@ -141,7 +147,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-black text-white py-3 rounded-lg flex items-center justify-center gap-2 text-sm font-semibold"
+            className="w-full bg-black text-white py-3 rounded-lg flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-70"
           >
             {loading ? (
               <Loader2 size={16} className="animate-spin" />
@@ -154,8 +160,11 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-6 text-center text-sm text-gray-500">
-          Don’t have an account?{' '}
-          <Link href="/auth/signup" className="font-semibold text-black hover:underline">
+          Don't have an account?{' '}
+          <Link
+            href="/auth/signup"
+            className="font-semibold text-black hover:underline"
+          >
             Sign up
           </Link>
         </p>

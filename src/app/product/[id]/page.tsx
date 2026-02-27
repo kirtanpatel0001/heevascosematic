@@ -9,7 +9,6 @@ import { Playfair_Display, Montserrat } from "next/font/google";
 import GalleryClient from "@/components/GalleryClient"; 
 import ProductInfo from "@/components/ProductInfo"; 
 import ReviewsSection from "@/components/ReviewsSection"; 
-import BeforeAfterSlider from "@/components/BeforeAfterSlider"; 
 import ProductTabs from "@/components/ProductTabs"; 
 import { Toaster } from "sonner"; 
 
@@ -82,19 +81,6 @@ export default async function ProductPage({ params }: ProductPageProps) {
     ? product.images 
     : (product.image_url ? [product.image_url] : []);
 
-  const usageSteps = Array.isArray(product.usage_steps) ? product.usage_steps : [];
-  const showBeforeAfter = product.before_image && product.after_image;
-
-  const tabData = {
-    description: product.description || "",
-    ingredients: product.ingredients || "",
-    whyChooseData: Array.isArray(product.why_choose_data) ? product.why_choose_data : [],
-    additionalInfoData: Array.isArray(product.additional_info_data) ? product.additional_info_data : [],
-    productImage: product.comparison_our_image || product.image_url, 
-    otherImage: product.comparison_other_image || null,
-    additionalInfoImage: product.additional_info_image || null
-  };
-
   return (
     <div className={`min-h-screen bg-white ${montserrat.className} text-zinc-900 pb-20 overflow-x-hidden`}>
       <Toaster position="top-center" richColors />
@@ -118,7 +104,6 @@ export default async function ProductPage({ params }: ProductPageProps) {
           
           {/* LEFT: GALLERY */}
           <div className="w-full lg:col-span-7 relative z-0 mb-8 lg:mb-0 lg:sticky lg:top-10">
-            {/* TIP: Ensure the first <Image> inside GalleryClient has priority={true} */}
             <GalleryClient images={galleryImages} name={product.name} />
           </div>
 
@@ -133,96 +118,32 @@ export default async function ProductPage({ params }: ProductPageProps) {
       </div>
 
       {/* --- SECTION: PRODUCT TABS --- */}
-      <ProductTabs {...tabData} />
+      <ProductTabs
+        description={product.description}
+        ingredients={product.ingredients}
 
-      {/* --- SECTION: HOW TO USE (OPTIMIZED IMAGES) --- */}
-      {usageSteps.length > 0 && usageSteps[0]?.title && (
-        <div className="w-full bg-zinc-50 py-16 md:py-24 my-10 border-t border-zinc-100">
-            <div className="max-w-[1440px] mx-auto px-6">
-                <div className="text-center mb-12">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500 mb-3 block">
-                    Ritual
-                    </span>
-                    <h2 className={`${playfair.className} text-3xl md:text-4xl text-black`}>
-                        How to Use
-                    </h2>
-                </div>
+        hero_ingredients={product.hero_ingredients}
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12">
-                    {usageSteps.map((step: any, index: number) => (
-                        <div key={index} className="flex flex-col items-center text-center group">
-                            <div className="relative w-full aspect-square md:aspect-[4/5] overflow-hidden rounded-lg mb-6 shadow-sm bg-white border border-zinc-100">
-                                {step.image ? (
-                                    <Image 
-                                        src={step.image} 
-                                        alt={step.title}
-                                        fill
-                                        // 1. Removed unoptimized={true}
-                                        // 2. Added sizes to download smaller images on mobile
-                                        sizes="(max-width: 768px) 100vw, 33vw"
-                                        className="object-cover transition-transform duration-700 group-hover:scale-105"
-                                    />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center bg-zinc-50 text-zinc-300">
-                                        <span className="text-[10px] uppercase font-bold tracking-widest">No Image</span>
-                                    </div>
-                                )}
-                                
-                                <div className="absolute inset-0 bg-black/5" />
-                                <div className="absolute top-4 left-4 w-8 h-8 bg-white/90 backdrop-blur rounded-full flex items-center justify-center text-xs font-bold font-serif shadow-sm">
-                                    {index + 1}
-                                </div>
-                            </div>
+        usage_steps={product.usage_steps}
 
-                            <h3 className={`${playfair.className} text-xl font-bold mb-2`}>{step.title}</h3>
-                            <p className="text-zinc-600 text-sm leading-relaxed max-w-[250px]">
-                                {step.text}
-                            </p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-      )}
+        before_image={product.before_image}
+        after_image={product.after_image}
 
-      {/* --- SECTION: BEFORE & AFTER SLIDER --- */}
-      {showBeforeAfter && (
-          <div className="max-w-[1440px] mx-auto px-6 mb-20">
-             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-                <div className="order-2 lg:order-1">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500 mb-3 block">
-                       Real Results
-                    </span>
-                    <h2 className={`${playfair.className} text-3xl md:text-4xl text-black mb-6`}>
-                        Transformation You Can See
-                    </h2>
-                    <p className="text-zinc-600 leading-relaxed mb-8">
-                        See the difference after just one wash. Our formula is designed to restore balance, 
-                        add shine, and improve texture instantly without weighing hair down.
-                    </p>
-                    <div className="flex gap-8">
-                         <div>
-                            <h4 className={`${playfair.className} text-2xl font-bold`}>95%</h4>
-                            <p className="text-xs uppercase tracking-wider text-zinc-500 mt-1">Saw More Shine</p>
-                         </div>
-                         <div>
-                            <h4 className={`${playfair.className} text-2xl font-bold`}>92%</h4>
-                            <p className="text-xs uppercase tracking-wider text-zinc-500 mt-1">Felt Softer Hair</p>
-                         </div>
-                    </div>
-                </div>
+        comparison_our_image={product.comparison_our_image}
+        comparison_other_image={product.comparison_other_image}
+        comparison_promises_image={product.comparison_promises_image}
+        our_product_features={product.our_product_features}
+        others_features={product.others_features}
 
-                <div className="order-1 lg:order-2 w-full h-full flex items-center justify-center">
-                    <div className="w-full max-w-xl shadow-2xl rounded-lg">
-                        <BeforeAfterSlider 
-                            beforeImage={product.before_image} 
-                            afterImage={product.after_image} 
-                        />
-                    </div>
-                </div>
-             </div>
-          </div>
-      )}
+        best_before={product.best_before}
+        net_content={product.net_content}
+        country_of_origin={product.country_of_origin}
+        manufactured_by={product.manufactured_by}
+        powered_by={product.powered_by}
+        marketed_by={product.marketed_by}
+        customer_care_phone={product.customer_care_phone}
+        customer_care_email={product.customer_care_email}
+      />
 
       {/* --- DIVIDER --- */}
       <div className="w-full h-px bg-zinc-200 my-16 md:my-24 px-6 mx-auto"></div>
@@ -233,7 +154,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
       {/* --- DIVIDER --- */}
       <div className="w-full h-px bg-zinc-200 my-16 md:my-24 px-6 mx-auto"></div>
 
-      {/* --- RELATED PRODUCTS (OPTIMIZED IMAGES) --- */}
+      {/* --- RELATED PRODUCTS --- */}
       {relatedProducts && relatedProducts.length > 0 ? (
         <div className="max-w-[1440px] mx-auto px-6 md:px-8 mb-20">
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
@@ -256,8 +177,6 @@ export default async function ProductPage({ params }: ProductPageProps) {
                             src={item.image_url} 
                             alt={item.name} 
                             fill 
-                            // 1. Removed unoptimized={true}
-                            // 2. Added sizes for performance
                             sizes="(max-width: 768px) 50vw, 25vw"
                             className="object-contain p-0 transition-transform duration-700 group-hover:scale-105" 
                          />

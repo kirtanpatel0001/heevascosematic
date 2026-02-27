@@ -1,11 +1,13 @@
 import { getStaticSupabase } from "@/lib/supabaseStatic";
 import HeevasHeroSection from "./Home/HeevasHero";
-import HeevasCareSection from "./Home/HeevasCare";
-import HeevasFeaturesSection from "./Home/HeevasFeatures";
 import HeevasProduct from "./Home/HeevasProduct"; // This is your Client Component
 import HeevasUseingSection from "./Home/HeevasUseing";
 import ShopByConcern from "./Home/ShopByConcern";
-import TrustBar from "./Home/TrustBar";
+import Strip from "./Home/strip";
+import Instagram from "./Home/INSTARAM"
+import OfferBanner from "./Home/OFFERBANNER";
+import USP from "./Home/USP";
+import Consultant from "./Home/CONSULTANT";
 
 // Refresh data every 60 seconds
 export const revalidate = 60;
@@ -59,18 +61,17 @@ export default async function Home() {
   return (
     <div>
       <HeevasHeroSection />
-      <TrustBar />
-      <ShopByConcern />
-      
-      {/* PASS THE DATA HERE to fix the "map of undefined" error */}
+      <Strip />
+      <ShopByConcern />     
       <HeevasProduct 
         initialProducts={productsWithStats} 
         initialWishlist={wishlistIds} 
-      />
-      
-      <HeevasFeaturesSection />
+      />     
+      <OfferBanner/>
       <HeevasUseingSection />
-      <HeevasCareSection />
+      <Instagram />
+      <USP />
+      <Consultant />
     </div>
   );
 }

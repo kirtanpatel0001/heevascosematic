@@ -26,18 +26,12 @@ export default function SignUpPage() {
 
   const [otp, setOtp] = useState('');
 
-  /* ---------------- COOLDOWN TIMER ---------------- */
   useEffect(() => {
     if (cooldown <= 0) return;
-
-    const t = setInterval(() => {
-      setCooldown((c) => c - 1);
-    }, 1000);
-
+    const t = setInterval(() => setCooldown((c) => c - 1), 1000);
     return () => clearInterval(t);
   }, [cooldown]);
 
-  /* ---------------- STEP 1: SIGNUP + SEND OTP ---------------- */
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cooldown > 0) return;
@@ -46,7 +40,6 @@ export default function SignUpPage() {
     setError('');
 
     try {
-      // 1️⃣ Create user with password
       const { error: signUpError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -65,16 +58,10 @@ export default function SignUpPage() {
         throw signUpError;
       }
 
-      // 2️⃣ Send OTP
       const { error: otpError } = await supabase.auth.signInWithOtp({
         email: formData.email,
       });
 
-      /**
-       * CRITICAL FIX:
-       * If rate-limited, OTP was already sent.
-       * We MUST redirect to OTP screen anyway.
-       */
       if (otpError) {
         if (
           otpError.message.includes('security purposes') ||
@@ -95,21 +82,21 @@ export default function SignUpPage() {
     }
   };
 
-  /* ---------------- STEP 2: VERIFY OTP ---------------- */
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      if (otp.length !== 8) {
-        throw new Error('OTP must be 8 digits');
+      // ✅ Fixed: 6 digits to match Supabase default
+      if (otp.length !== 6) {
+        throw new Error('OTP must be 6 digits');
       }
 
       const { error } = await supabase.auth.verifyOtp({
         email: formData.email,
         token: otp,
-        type: 'email',
+        type: 'email', // ✅ Fixed: matches signInWithOtp type
       });
 
       if (error) throw error;
@@ -125,7 +112,6 @@ export default function SignUpPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-white px-4">
       <div className="w-full max-w-[420px] border border-black rounded-xl p-8">
-
         {error && (
           <div className="mb-4 border border-black text-black text-xs p-3 text-center">
             {error}
@@ -142,57 +128,45 @@ export default function SignUpPage() {
           <p className="text-sm text-black mt-2">
             {step === 1
               ? 'Fill details to receive OTP'
-              : `Enter the 8-digit OTP sent to ${formData.email}`}
+              : `Enter the 6-digit OTP sent to ${formData.email}`}
           </p>
         </div>
 
-        {/* STEP 1 */}
         {step === 1 && (
           <form onSubmit={handleSendOtp} className="space-y-4">
             <input
               required
               placeholder="Full Name"
-              className="w-full border border-black p-3 text-black"
+              className="w-full border border-black p-3 text-black focus:outline-none focus:ring-2 focus:ring-black"
               value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             />
-
             <input
               required
               type="email"
               placeholder="Email"
-              className="w-full border border-black p-3 text-black"
+              className="w-full border border-black p-3 text-black focus:outline-none focus:ring-2 focus:ring-black"
               value={formData.email}
-              onChange={(e) =>
-                setFormData({ ...formData, email: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
             />
-
             <input
               required
               type="tel"
               placeholder="Phone"
-              className="w-full border border-black p-3 text-black"
+              pattern="[0-9]{10}"
+              className="w-full border border-black p-3 text-black focus:outline-none focus:ring-2 focus:ring-black"
               value={formData.phone}
-              onChange={(e) =>
-                setFormData({ ...formData, phone: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
             />
-
             <input
               required
               type="password"
-              minLength={6}
-              placeholder="Password"
-              className="w-full border border-black p-3 text-black"
+              minLength={8}
+              placeholder="Password (min 8 characters)"
+              className="w-full border border-black p-3 text-black focus:outline-none focus:ring-2 focus:ring-black"
               value={formData.password}
-              onChange={(e) =>
-                setFormData({ ...formData, password: e.target.value })
-              }
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
             />
-
             <button
               type="submit"
               disabled={loading || cooldown > 0}
@@ -207,29 +181,45 @@ export default function SignUpPage() {
           </form>
         )}
 
-        {/* STEP 2 */}
         {step === 2 && (
           <form onSubmit={handleVerifyOtp} className="space-y-4">
             <input
               required
               inputMode="numeric"
-              pattern="[0-9]{8}"
-              maxLength={8}
-              placeholder="Enter 8-digit OTP"
-              className="w-full border border-black p-3 text-black text-center tracking-widest"
+              pattern="[0-9]{6}"
+              maxLength={6}  // ✅ Fixed: 6 digits
+              placeholder="Enter 6-digit OTP"
+              className="w-full border border-black p-3 text-black text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-black"
               value={otp}
               onChange={(e) =>
-                setOtp(e.target.value.replace(/\D/g, '').slice(0, 8))
+                setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))
               }
             />
-
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-black text-white py-3 font-semibold"
+              className="w-full bg-black text-white py-3 font-semibold disabled:opacity-50"
             >
-              {loading ? <Loader2 className="animate-spin mx-auto" size={16} /> : 'Verify OTP'}
+              {loading ? (
+                <Loader2 className="animate-spin mx-auto" size={16} />
+              ) : (
+                'Verify OTP'
+              )}
             </button>
+
+            {cooldown === 0 ? (
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="w-full text-xs text-gray-500 hover:text-black underline"
+              >
+                Resend OTP
+              </button>
+            ) : (
+              <p className="text-center text-xs text-gray-500">
+                Resend OTP in {cooldown}s
+              </p>
+            )}
           </form>
         )}
 
@@ -239,7 +229,6 @@ export default function SignUpPage() {
             Log in
           </Link>
         </p>
-
       </div>
     </div>
   );

@@ -1,0 +1,797 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import {
+  Plus, Edit2, Trash2, X, Loader2,
+  UploadCloud, Package, ChevronDown, Check,
+  Home, ListOrdered, Eye, EyeOff, Search,
+  TrendingUp, AlertTriangle, BoxSelect, Star
+} from 'lucide-react';
+import { getSupabaseClient } from '@/lib/supabase/client';
+
+// --- CONSTANTS ---
+const HAIR_TYPE_OPTIONS = ['Oily', 'Dry', 'Sensitive', 'Normal'];
+const CONCERN_OPTIONS = [
+  'Hair Fall Control', 'Anti-Dandruff', 'Scalp Therapy',
+  'Damage Repair', 'Frizz Control', 'Deep Hydration & Shine & Glow',
+];
+const CATEGORY_OPTIONS = ['Hair Oil', 'Shampoo', 'Conditioner', 'Hair Mask', 'Serum', 'Combo Kit'];
+
+// --- TYPES ---
+interface UsageStep { title: string; text: string; image: string; }
+
+interface Product {
+  id?: string;
+  created_at?: string;
+  name: string;
+  sku: string;
+  original_price: number;
+  price: number;
+  stock: number;
+  status: string;
+  category: string;
+  hair_type: string[];
+  hair_concern: string[];
+  benefits: string[];
+  short_description: string;
+  description: string;
+  ingredients: string;
+  usage_steps: UsageStep[];
+  volume_ml: number;
+  weight: number;
+  images: string[];
+  image_url: string | null;
+  before_image: string | null;
+  after_image: string | null;
+  is_visible: boolean;
+  show_on_home?: boolean;
+}
+
+const DEFAULT_STEPS: UsageStep[] = [
+  { title: 'Apply', text: '', image: '' },
+  { title: 'Massage', text: '', image: '' },
+  { title: 'Rinse', text: '', image: '' },
+];
+
+const INITIAL: Product = {
+  name: '', sku: '', original_price: 0, price: 0, stock: 0,
+  status: 'in_stock', category: 'Shampoo',
+  hair_type: [], hair_concern: [], benefits: [],
+  short_description: '', description: '', ingredients: '',
+  usage_steps: DEFAULT_STEPS,
+  volume_ml: 0, weight: 0, images: [], image_url: null,
+  before_image: null, after_image: null,
+  is_visible: true, show_on_home: false,
+};
+
+// --- MULTI-SELECT DROPDOWN ---
+function MultiSelectDropdown({ label, options, selectedValues, onChange }: {
+  label: string; options: string[]; selectedValues: string[]; onChange: (v: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  const toggle = (opt: string) =>
+    onChange(selectedValues.includes(opt) ? selectedValues.filter(v => v !== opt) : [...selectedValues, opt]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <label className="input-label mb-1.5">{label}</label>
+      <div onClick={() => setOpen(!open)}
+        className={`w-full min-h-[40px] px-3 py-2 bg-[#f8fafc] border rounded-lg cursor-pointer transition-all flex flex-wrap items-center gap-1.5
+          ${open ? 'border-black bg-white shadow-sm' : 'border-[#e2e8f0] hover:border-slate-300'}`}>
+        {selectedValues.length === 0 && <span className="text-slate-400 text-[13px] font-semibold">Select options…</span>}
+        {selectedValues.map(val => (
+          <span key={val} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-black text-white text-[11px] font-bold uppercase tracking-wide">
+            {val}
+            <button type="button" onClick={e => { e.stopPropagation(); onChange(selectedValues.filter(v => v !== val)); }}
+              className="text-white/60 hover:text-white"><X size={10} strokeWidth={3} /></button>
+          </span>
+        ))}
+        <div className="ml-auto shrink-0 text-slate-400">
+          <ChevronDown size={14} className={`transition-transform duration-200 ${open ? 'rotate-180 text-black' : ''}`} />
+        </div>
+      </div>
+      {open && (
+        <div className="absolute z-50 w-full mt-1.5 bg-white border border-slate-100 rounded-xl shadow-2xl overflow-hidden p-2">
+          <div className="max-h-[220px] overflow-y-auto scrollbar-hide space-y-0.5">
+            {options.map(opt => {
+              const sel = selectedValues.includes(opt);
+              return (
+                <div key={opt} onClick={() => toggle(opt)}
+                  className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-all text-[13px] font-semibold
+                    ${sel ? 'bg-slate-50 text-black' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
+                  <span>{opt}</span>
+                  {sel && <Check size={14} className="text-black" strokeWidth={3} />}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- SIMPLE TOGGLE ---
+function Toggle({ on, onChange }: { on: boolean; onChange: () => void }) {
+  return (
+    <button type="button" onClick={onChange}
+      className={`relative shrink-0 rounded-full transition-colors duration-300 ${on ? 'bg-black' : 'bg-slate-300'}`}
+      style={{ width: 40, height: 22 }}>
+      <div className="absolute top-0.5 rounded-full bg-white shadow transition-all duration-300"
+        style={{ width: 18, height: 18, top: 2, left: on ? 20 : 2 }} />
+    </button>
+  );
+}
+
+// --- IMAGE SLOT ---
+function ImageSlot({ src, label, uploading, onUpload, onRemove, aspect = 'aspect-square' }: {
+  src: string | null; label?: string; uploading?: boolean;
+  onUpload: (f: File) => void; onRemove: () => void; aspect?: string;
+}) {
+  return (
+    <div>
+      {label && <label className="input-label mb-1.5">{label}</label>}
+      <div className={`relative w-full ${aspect} bg-slate-50 rounded-xl border border-slate-200 overflow-hidden group`}>
+        {src ? (
+          <>
+            <img src={src} className="w-full h-full object-cover" alt="" />
+            <button type="button" onClick={onRemove}
+              className="absolute top-1.5 right-1.5 bg-black/60 hover:bg-black text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+              <X size={12} />
+            </button>
+          </>
+        ) : (
+          <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer text-slate-400 hover:text-black hover:bg-slate-100 transition-all gap-1.5">
+            <input type="file" accept="image/*" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ''; }} />
+            {uploading ? <Loader2 size={20} className="animate-spin" /> : <UploadCloud size={20} />}
+            <span className="text-[9px] font-black uppercase tracking-widest">{uploading ? 'Uploading…' : 'Upload'}</span>
+          </label>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- STAT CARD ---
+function StatCard({ label, value, sub, highlight }: { label: string; value: string | number; sub?: string; highlight?: 'warn' | 'danger' }) {
+  return (
+    <div className={`bg-white border rounded-2xl p-5 shadow-sm ${highlight === 'danger' ? 'border-red-200 bg-red-50' : highlight === 'warn' ? 'border-amber-200 bg-amber-50' : 'border-gray-100'}`}>
+      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</p>
+      <p className={`text-2xl font-black tracking-tight ${highlight === 'danger' ? 'text-red-700' : highlight === 'warn' ? 'text-amber-700' : 'text-slate-900'}`}>{value}</p>
+      {sub && <p className="text-[11px] text-slate-400 mt-0.5 font-medium">{sub}</p>}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// MAIN PAGE
+// ══════════════════════════════════════════════════════════════
+export default function ProductsPage() {
+  const supabase = getSupabaseClient();
+
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [current, setCurrent] = useState<Product>(INITIAL);
+  const [benefitsText, setBenefitsText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filterCat, setFilterCat] = useState('All');
+  const [formTab, setFormTab] = useState<'basic' | 'media' | 'howto'>('basic');
+
+  useEffect(() => { fetchProducts(); }, []);
+
+  const fetchProducts = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+    if (error) console.error('Fetch error:', error);
+    const safe = (data || []).map((p: any) => ({
+      ...p,
+      hair_type: Array.isArray(p.hair_type) ? p.hair_type : [],
+      hair_concern: Array.isArray(p.hair_concern) ? p.hair_concern : [],
+      benefits: Array.isArray(p.benefits) ? p.benefits : [],
+      images: Array.isArray(p.images) ? p.images : [],
+      usage_steps: Array.isArray(p.usage_steps) && p.usage_steps.length === 3 ? p.usage_steps : [...DEFAULT_STEPS],
+      show_on_home: p.show_on_home || false,
+    }));
+    setProducts(safe as Product[]);
+    setLoading(false);
+  };
+
+  // ── Upload helper ──
+  const uploadFile = async (file: File): Promise<string | null> => {
+    const ext = file.name.split('.').pop();
+    const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await supabase.storage.from('product-images').upload(path, file);
+    if (error) { console.error('Upload error:', error); return null; }
+    return supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+  };
+
+  const openModal = (product?: Product) => {
+    if (product) {
+      setCurrent({
+        ...product,
+        hair_type: Array.isArray(product.hair_type) ? product.hair_type : [],
+        hair_concern: Array.isArray(product.hair_concern) ? product.hair_concern : [],
+        images: Array.isArray(product.images) ? product.images : [],
+        usage_steps: Array.isArray(product.usage_steps) && product.usage_steps.length === 3 ? product.usage_steps : [...DEFAULT_STEPS],
+      });
+      setBenefitsText(product.benefits?.join(', ') || '');
+    } else {
+      setCurrent({ ...INITIAL, usage_steps: [...DEFAULT_STEPS] });
+      setBenefitsText('');
+    }
+    setFormTab('basic');
+    setIsModalOpen(true);
+  };
+
+  const handleMultiUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    setUploading(true);
+    const urls = [...(current.images || [])];
+    for (const f of Array.from(files)) { const u = await uploadFile(f); if (u) urls.push(u); }
+    setCurrent(p => ({ ...p, images: urls, image_url: p.image_url || urls[0] || null }));
+    setUploading(false);
+    e.target.value = '';
+  };
+
+  const handleSingleUpload = async (file: File, field: 'before_image' | 'after_image') => {
+    setUploading(true);
+    const url = await uploadFile(file);
+    if (url) setCurrent(p => ({ ...p, [field]: url }));
+    setUploading(false);
+  };
+
+  const updateStep = (idx: number, field: keyof UsageStep, val: string) =>
+    setCurrent(p => { const s = [...p.usage_steps]; s[idx] = { ...s[idx], [field]: val }; return { ...p, usage_steps: s }; });
+
+  const uploadStepImg = async (idx: number, file: File) => {
+    setUploading(true);
+    const url = await uploadFile(file);
+    if (url) updateStep(idx, 'image', url);
+    setUploading(false);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    const payload = {
+      ...current,
+      price: Number(current.price),
+      original_price: Number(current.original_price),
+      stock: Number(current.stock || 0),
+      volume_ml: Number(current.volume_ml || 0),
+      weight: Number(current.weight || 0),
+      benefits: benefitsText.split(',').map(s => s.trim()).filter(Boolean),
+      image_url: current.images?.[0] || null,
+    };
+    const { id, created_at, ...clean } = payload;
+
+    const { error } = current.id
+      ? await supabase.from('products').update(clean).eq('id', current.id)
+      : await supabase.from('products').insert([clean]);
+
+    if (!error) { setIsModalOpen(false); fetchProducts(); }
+    else alert('Save error: ' + error.message);
+    setSaving(false);
+  };
+
+  const handleDelete = async (product: Product) => {
+    if (!confirm(`Delete "${product.name}"? This cannot be undone.`)) return;
+    setLoading(true);
+    try {
+      const allUrls = [
+        ...(product.images || []),
+        product.image_url, product.before_image, product.after_image,
+        ...(product.usage_steps || []).map(s => s.image),
+      ].filter((u): u is string => typeof u === 'string' && u.length > 0);
+
+      const paths = [...new Set(allUrls)]
+        .map(u => u.includes('/product-images/') ? u.split('/product-images/')[1] : null)
+        .filter((p): p is string => p !== null);
+
+      if (paths.length) await supabase.storage.from('product-images').remove(paths);
+      const { error } = await supabase.from('products').delete().eq('id', product.id);
+      if (error) throw error;
+      await fetchProducts();
+    } catch (err: any) { alert('Delete failed: ' + err.message); }
+    finally { setLoading(false); }
+  };
+
+  const toggleHome = async (id?: string, cur?: boolean) => {
+    if (!id) return;
+    if (!cur && products.filter(p => p.show_on_home).length >= 4) { alert('Max 4 on Home.'); return; }
+    await supabase.from('products').update({ show_on_home: !cur }).eq('id', id);
+    fetchProducts();
+  };
+
+  const toggleVisible = async (id?: string, cur?: boolean) => {
+    if (!id) return;
+    await supabase.from('products').update({ is_visible: !cur }).eq('id', id);
+    fetchProducts();
+  };
+
+  const filtered = products.filter(p =>
+    (!search || p.name.toLowerCase().includes(search.toLowerCase()) || (p.sku || '').toLowerCase().includes(search.toLowerCase())) &&
+    (filterCat === 'All' || p.category === filterCat)
+  );
+
+  const totalStock = products.reduce((s, p) => s + (p.stock || 0), 0);
+  const lowStock = products.filter(p => p.stock > 0 && p.stock <= 10).length;
+  const onHome = products.filter(p => p.show_on_home).length;
+  const discountPct = (p: Product) => p.original_price > 0 ? Math.round(((p.original_price - p.price) / p.original_price) * 100) : 0;
+
+  return (
+    <div className="min-h-screen bg-[#F8F9FC] p-4 md:p-8 font-sans text-slate-900">
+
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div>
+          <h1 className="text-2xl font-black tracking-tight">Product Inventory</h1>
+          <p className="text-slate-500 text-sm mt-0.5">Manage catalogue, pricing, media and visibility.</p>
+        </div>
+        <button onClick={() => openModal()} className="bg-black text-white px-5 py-2.5 rounded-xl text-sm font-black flex items-center gap-2 shadow-lg hover:bg-zinc-800 transition-colors">
+          <Plus size={16} strokeWidth={2.5} /> Add Product
+        </button>
+      </div>
+
+      {/* STAT CARDS */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <StatCard label="Total Products" value={products.length} sub="in catalogue" />
+        <StatCard label="Total Stock" value={totalStock.toLocaleString()} sub="units across all products" />
+        <StatCard label="Low Stock" value={lowStock} sub="≤ 10 units remaining" highlight={lowStock > 0 ? 'warn' : undefined} />
+        <StatCard label="Featured on Home" value={`${onHome} / 4`} sub="slots used" highlight={onHome >= 4 ? 'danger' : undefined} />
+      </div>
+
+      {/* FILTER BAR */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-5">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or SKU…"
+            className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold outline-none focus:border-black transition-colors shadow-sm placeholder:text-slate-400" />
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {['All', ...CATEGORY_OPTIONS].map(cat => (
+            <button key={cat} onClick={() => setFilterCat(cat)}
+              className={`px-3.5 py-2 text-[11px] font-black uppercase tracking-wide rounded-xl border transition-all
+                ${filterCat === cat ? 'bg-black text-white border-black' : 'bg-white border-gray-200 text-slate-500 hover:border-slate-400'}`}>
+              {cat}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* TABLE */}
+      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+        {loading ? (
+          <div className="flex items-center justify-center py-20 text-slate-400">
+            <Loader2 size={22} className="animate-spin mr-3" /> Loading products…
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-2">
+            <BoxSelect size={32} className="opacity-30" />
+            <p className="text-sm font-semibold">No products found.</p>
+            <p className="text-xs">Try adjusting your search or filters.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left min-w-[900px]">
+              <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-400 tracking-wider border-b border-slate-100">
+                <tr>
+                  <th className="px-5 py-3.5">Product</th>
+                  <th className="px-5 py-3.5">Category</th>
+                  <th className="px-5 py-3.5">Pricing</th>
+                  <th className="px-5 py-3.5">Stock</th>
+                  <th className="px-5 py-3.5">Status</th>
+                  <th className="px-5 py-3.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50 text-sm">
+                {filtered.map(p => (
+                  <tr key={p.id} className="hover:bg-slate-50/70 transition-colors group">
+
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-12 w-12 bg-slate-100 rounded-xl overflow-hidden border border-slate-200 shrink-0">
+                          {p.image_url
+                            ? <img src={p.image_url} className="w-full h-full object-cover" alt={p.name} />
+                            : <div className="w-full h-full flex items-center justify-center text-slate-300"><Package size={18} /></div>}
+                        </div>
+                        <div>
+                          <span className="font-black text-slate-900 block max-w-[180px] truncate">{p.name}</span>
+                          <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wide">{p.sku || 'NO SKU'}</span>
+                          {p.volume_ml > 0 && <span className="text-[10px] text-slate-400 font-medium block">{p.volume_ml}ml</span>}
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <span className="px-2.5 py-1 rounded-lg text-[11px] font-black bg-slate-100 text-slate-600 border border-slate-200 inline-block">
+                        {p.category}
+                      </span>
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <p className="font-black text-slate-900">₹{p.price.toLocaleString()}</p>
+                      {p.original_price > p.price && (
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <p className="text-[11px] text-slate-400 line-through">₹{p.original_price.toLocaleString()}</p>
+                          <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md">-{discountPct(p)}%</span>
+                        </div>
+                      )}
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-2">
+                        <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${p.stock > 10 ? 'bg-emerald-500' : p.stock > 0 ? 'bg-amber-500' : 'bg-red-500'}`} />
+                        <div>
+                          <p className={`text-xs font-black ${p.stock > 10 ? 'text-emerald-700' : p.stock > 0 ? 'text-amber-700' : 'text-red-700'}`}>
+                            {p.stock > 0 ? `${p.stock} units` : 'Out of Stock'}
+                          </p>
+                          <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wide">{p.status?.replace('_', ' ')}</p>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <div className="flex flex-col gap-1.5">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wide w-fit
+                          ${p.is_visible ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                          {p.is_visible ? <Eye size={10} /> : <EyeOff size={10} />}
+                          {p.is_visible ? 'Visible' : 'Hidden'}
+                        </span>
+                        {p.show_on_home && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-50 text-amber-700 w-fit">
+                            <Star size={10} fill="currentColor" /> Featured
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="px-5 py-4">
+                      <div className="flex justify-end items-center gap-1">
+                        <button onClick={() => openModal(p)} title="Edit"
+                          className="p-2 rounded-lg hover:bg-white hover:border-slate-200 border border-transparent transition-all group/btn">
+                          <Edit2 size={15} className="text-slate-400 group-hover/btn:text-black transition-colors" />
+                        </button>
+                        <button onClick={() => toggleVisible(p.id, p.is_visible)} title={p.is_visible ? 'Hide' : 'Show'}
+                          className={`p-2 rounded-lg border transition-all ${!p.is_visible ? 'bg-slate-100 border-slate-200' : 'border-transparent hover:bg-slate-100 hover:border-slate-200'}`}>
+                          {p.is_visible ? <Eye size={15} className="text-slate-400" /> : <EyeOff size={15} className="text-slate-500" />}
+                        </button>
+                        <button onClick={() => toggleHome(p.id, p.show_on_home)} title={p.show_on_home ? 'Remove from Home' : 'Feature on Home'}
+                          className={`p-2 rounded-lg border transition-all ${p.show_on_home ? 'bg-amber-100 border-amber-200 text-amber-700' : 'border-transparent hover:bg-amber-50 hover:border-amber-200 text-slate-400 hover:text-amber-600'}`}>
+                          <Home size={15} />
+                        </button>
+                        <button onClick={() => handleDelete(p)} title="Delete"
+                          className="p-2 rounded-lg border border-transparent hover:bg-red-50 hover:border-red-100 group/del transition-all">
+                          <Trash2 size={15} className="text-slate-400 group-hover/del:text-red-600 transition-colors" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-400 font-semibold">
+              Showing {filtered.length} of {products.length} products
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ══════════════════ MODAL ══════════════════ */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-6xl rounded-2xl shadow-2xl flex flex-col max-h-[95vh] overflow-hidden">
+
+            {/* Modal header */}
+            <div className="flex-none px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <div>
+                <h2 className="text-base font-black text-slate-900">{current.id ? `Edit — ${current.name}` : 'Add New Product'}</h2>
+                <p className="text-[11px] text-slate-400 mt-0.5 font-medium">
+                  {current.id ? 'Update details, pricing, media and usage steps.' : 'Fill in product info below. Use tabs to navigate sections.'}
+                </p>
+              </div>
+              <button onClick={() => setIsModalOpen(false)}
+                className="p-2 bg-white rounded-full text-slate-400 hover:text-black hover:bg-slate-100 transition-colors shadow-sm border border-slate-100">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Tab nav */}
+            <div className="flex-none flex border-b border-gray-100 bg-white px-6">
+              {([['basic', 'Info & Stock'], ['media', 'Media & Content'], ['howto', 'How to Use']] as const).map(([key, label]) => (
+                <button key={key} onClick={() => setFormTab(key)}
+                  className={`px-5 py-3.5 text-[11px] font-black uppercase tracking-widest border-b-2 transition-all
+                    ${formTab === key ? 'border-black text-black' : 'border-transparent text-slate-400 hover:text-slate-700'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              <form id="product-form" onSubmit={handleSave}>
+
+                {/* ── TAB: Info & Stock ── */}
+                {formTab === 'basic' && (
+                  <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Left */}
+                    <div className="space-y-5">
+                      <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Core Details</h3>
+                      <div>
+                        <label className="input-label">Product Name *</label>
+                        <input required className="input-field" placeholder="e.g. Argan Hair Oil"
+                          value={current.name} onChange={e => setCurrent(p => ({ ...p, name: e.target.value }))} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="input-label">SKU *</label>
+                          <input required className="input-field uppercase" placeholder="HO-001"
+                            value={current.sku} onChange={e => setCurrent(p => ({ ...p, sku: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label className="input-label">Volume (ml)</label>
+                          <input type="number" className="input-field" value={current.volume_ml}
+                            onChange={e => setCurrent(p => ({ ...p, volume_ml: Number(e.target.value) }))} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="input-label">MRP (₹) *</label>
+                          <input type="number" required className="input-field" value={current.original_price}
+                            onChange={e => setCurrent(p => ({ ...p, original_price: Number(e.target.value) }))} />
+                        </div>
+                        <div>
+                          <label className="input-label">Sale Price (₹) *</label>
+                          <input type="number" required className="input-field" value={current.price}
+                            onChange={e => setCurrent(p => ({ ...p, price: Number(e.target.value) }))} />
+                        </div>
+                      </div>
+                      {current.original_price > current.price && current.original_price > 0 && (
+                        <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5 flex items-center gap-2">
+                          <TrendingUp size={14} className="text-emerald-600" />
+                          <p className="text-[12px] font-black text-emerald-700">
+                            {discountPct(current)}% discount · Customer saves ₹{(current.original_price - current.price).toLocaleString()}
+                          </p>
+                        </div>
+                      )}
+                      <div>
+                        <label className="input-label">Benefits (Comma Separated)</label>
+                        <input className="input-field" placeholder="Sulphate Free, Vegan, Paraben Free…"
+                          value={benefitsText} onChange={e => setBenefitsText(e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="input-label">Ingredients</label>
+                        <textarea rows={4} className="input-field resize-none"
+                          value={current.ingredients} onChange={e => setCurrent(p => ({ ...p, ingredients: e.target.value }))} />
+                      </div>
+                    </div>
+
+                    {/* Right */}
+                    <div className="space-y-5">
+                      <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Classification & Stock</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="input-label">Category</label>
+                          <select className="input-field" value={current.category}
+                            onChange={e => setCurrent(p => ({ ...p, category: e.target.value }))}>
+                            {CATEGORY_OPTIONS.map(c => <option key={c}>{c}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="input-label">Status</label>
+                          <select className="input-field" value={current.status}
+                            onChange={e => setCurrent(p => ({ ...p, status: e.target.value }))}>
+                            <option value="in_stock">In Stock</option>
+                            <option value="out_of_stock">Out of Stock</option>
+                            <option value="pre_order">Pre-Order</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="input-label">Stock Quantity</label>
+                          <input type="number" className="input-field" value={current.stock}
+                            onChange={e => setCurrent(p => ({ ...p, stock: Number(e.target.value) }))} />
+                        </div>
+                        <div>
+                          <label className="input-label">Weight (g)</label>
+                          <input type="number" className="input-field" value={current.weight}
+                            onChange={e => setCurrent(p => ({ ...p, weight: Number(e.target.value) }))} />
+                        </div>
+                      </div>
+                      {current.stock > 0 && current.stock <= 10 && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-center gap-2">
+                          <AlertTriangle size={14} className="text-amber-600" />
+                          <p className="text-[12px] font-black text-amber-700">Low stock — only {current.stock} units left</p>
+                        </div>
+                      )}
+                      <MultiSelectDropdown label="Hair Type" options={HAIR_TYPE_OPTIONS}
+                        selectedValues={current.hair_type}
+                        onChange={v => setCurrent(p => ({ ...p, hair_type: v }))} />
+                      <MultiSelectDropdown label="Shop by Concern" options={CONCERN_OPTIONS}
+                        selectedValues={current.hair_concern}
+                        onChange={v => setCurrent(p => ({ ...p, hair_concern: v }))} />
+
+                      {/* Visibility toggles */}
+                      <div className="space-y-3 pt-1">
+                        <div className="flex items-center justify-between px-4 py-3 bg-slate-50 rounded-xl border border-slate-200">
+                          <div>
+                            <p className="text-[12px] font-black text-slate-700">Visible on Store</p>
+                            <p className="text-[10px] text-slate-400 font-medium">Customers can browse & purchase</p>
+                          </div>
+                          <Toggle on={!!current.is_visible} onChange={() => setCurrent(p => ({ ...p, is_visible: !p.is_visible }))} />
+                        </div>
+                        <div className="flex items-center justify-between px-4 py-3 bg-amber-50 rounded-xl border border-amber-200">
+                          <div>
+                            <p className="text-[12px] font-black text-amber-800">Feature on Home Page</p>
+                            <p className="text-[10px] text-amber-600 font-medium">Max 4 products can be featured</p>
+                          </div>
+                          <Toggle on={!!current.show_on_home} onChange={() => {
+                            if (!current.show_on_home && products.filter(p => p.show_on_home && p.id !== current.id).length >= 4) { alert('Max 4 on Home.'); return; }
+                            setCurrent(p => ({ ...p, show_on_home: !p.show_on_home }));
+                          }} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── TAB: Media & Content ── */}
+                {formTab === 'media' && (
+                  <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-5">
+                      <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Product Gallery</h3>
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                        {current.images.length > 0 && (
+                          <div className="flex gap-2 overflow-x-auto pb-2 mb-3 scrollbar-hide">
+                            {current.images.map((img, i) => (
+                              <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden border border-slate-200 group shrink-0 bg-white">
+                                <img src={img} className="w-full h-full object-cover" alt="" />
+                                {i === 0 && <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[8px] font-black text-center py-0.5">MAIN</div>}
+                                <button type="button"
+                                  onClick={() => setCurrent(p => ({ ...p, images: p.images.filter((_, idx) => idx !== i), image_url: i === 0 ? p.images[1] || null : p.image_url }))}
+                                  className="absolute top-1 right-1 bg-black text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <X size={10} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <label className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl flex items-center justify-center cursor-pointer hover:bg-white hover:border-slate-400 transition-all text-slate-400 hover:text-black gap-2">
+                          <input type="file" multiple accept="image/*" className="hidden" onChange={handleMultiUpload} />
+                          {uploading ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
+                          <span className="text-[11px] font-black uppercase tracking-wide">{uploading ? 'Uploading…' : 'Add Gallery Images'}</span>
+                        </label>
+                        <p className="text-[10px] text-slate-400 text-center mt-2 font-medium">First image = main product photo</p>
+                      </div>
+
+                      <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Before & After</h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <ImageSlot label="Before" src={current.before_image} uploading={uploading} aspect="aspect-[4/5]"
+                          onUpload={f => handleSingleUpload(f, 'before_image')}
+                          onRemove={() => setCurrent(p => ({ ...p, before_image: null }))} />
+                        <ImageSlot label="After" src={current.after_image} uploading={uploading} aspect="aspect-[4/5]"
+                          onUpload={f => handleSingleUpload(f, 'after_image')}
+                          onRemove={() => setCurrent(p => ({ ...p, after_image: null }))} />
+                      </div>
+                    </div>
+
+                    <div className="space-y-5">
+                      <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Content</h3>
+                      <div>
+                        <label className="input-label">Short Description</label>
+                        <textarea rows={2} className="input-field resize-none" placeholder="Brief summary shown in cards…"
+                          value={current.short_description} onChange={e => setCurrent(p => ({ ...p, short_description: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="input-label flex justify-between">
+                          <span>Full Description</span>
+                          <span className="normal-case text-emerald-600 font-semibold text-[10px]">Press Enter for paragraphs</span>
+                        </label>
+                        <textarea rows={16} className="input-field resize-none leading-relaxed"
+                          placeholder="Full description — benefits, usage context, what makes it special…"
+                          value={current.description} onChange={e => setCurrent(p => ({ ...p, description: e.target.value }))} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── TAB: How to Use ── */}
+                {formTab === 'howto' && (
+                  <div className="p-6">
+                    <div className="flex items-center gap-2 mb-6">
+                      <ListOrdered size={16} className="text-slate-400" />
+                      <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">3-Step Usage Guide</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                      {current.usage_steps.map((step, idx) => (
+                        <div key={idx} className="border border-slate-200 bg-slate-50 rounded-2xl overflow-hidden">
+                          <div className="relative w-full aspect-[4/3] bg-white border-b border-slate-200">
+                            {step.image ? (
+                              <>
+                                <img src={step.image} className="w-full h-full object-cover" alt="" />
+                                <button type="button" onClick={() => updateStep(idx, 'image', '')}
+                                  className="absolute top-2 right-2 bg-black/60 hover:bg-black text-white p-1 rounded-full transition-colors">
+                                  <X size={12} />
+                                </button>
+                              </>
+                            ) : (
+                              <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer text-slate-400 hover:text-black hover:bg-slate-50 transition-all gap-1.5">
+                                <input type="file" accept="image/*" className="hidden"
+                                  onChange={e => { const f = e.target.files?.[0]; if (f) uploadStepImg(idx, f); e.target.value = ''; }} />
+                                {uploading ? <Loader2 size={22} className="animate-spin" /> : <UploadCloud size={22} />}
+                                <span className="text-[10px] font-black uppercase">Step {idx + 1} Image</span>
+                              </label>
+                            )}
+                            <div className="absolute top-2 left-2 w-7 h-7 rounded-full bg-black text-white flex items-center justify-center text-xs font-black shadow-lg">
+                              {idx + 1}
+                            </div>
+                          </div>
+                          <div className="p-4 space-y-3">
+                            <div>
+                              <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest block mb-1">Title</span>
+                              <input className="w-full text-sm font-black bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-black transition-colors"
+                                value={step.title} onChange={e => updateStep(idx, 'title', e.target.value)} placeholder="e.g. Apply" />
+                            </div>
+                            <div>
+                              <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest block mb-1">Instruction</span>
+                              <textarea rows={4} className="w-full text-[13px] font-medium bg-white border border-slate-200 rounded-lg px-3 py-2 resize-none outline-none focus:border-black transition-colors leading-relaxed"
+                                value={step.text} onChange={e => updateStep(idx, 'text', e.target.value)} placeholder="Describe this step…" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </form>
+            </div>
+
+            {/* Modal footer */}
+            <div className="flex-none p-5 border-t border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
+              {/* Tab progress dots */}
+              <div className="flex gap-1.5">
+                {(['basic', 'media', 'howto'] as const).map(tab => (
+                  <button key={tab} type="button" onClick={() => setFormTab(tab)}
+                    className={`h-2 rounded-full transition-all duration-300 ${formTab === tab ? 'bg-black w-6' : 'bg-slate-300 w-2'}`} />
+                ))}
+              </div>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => setIsModalOpen(false)}
+                  className="px-5 py-2.5 border border-slate-300 text-slate-700 font-black text-sm rounded-xl hover:bg-white transition-all">
+                  Cancel
+                </button>
+                <button type="submit" form="product-form" disabled={saving || uploading}
+                  className="px-6 py-2.5 bg-black text-white font-black text-sm rounded-xl hover:bg-slate-800 transition-all flex items-center gap-2 shadow-lg disabled:opacity-60">
+                  {saving && <Loader2 size={14} className="animate-spin" />}
+                  {saving ? 'Saving…' : current.id ? 'Update Product' : 'Create Product'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .input-label { display: block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin-bottom: 5px; }
+        .input-field { width: 100%; padding: 9px 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 13px; font-weight: 600; color: #1e293b; outline: none; transition: all 0.15s; }
+        .input-field:focus { border-color: #0f172a; background-color: #ffffff; box-shadow: 0 0 0 3px rgba(15,23,42,0.06); }
+        select.input-field { cursor: pointer; }
+      `}</style>
+    </div>
+  );
+}
