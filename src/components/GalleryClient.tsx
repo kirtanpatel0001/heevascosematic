@@ -1,77 +1,66 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import Image from 'next/image';
-import { Image as ImageIcon, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import Image from "next/image";
+import { Image as ImageIcon, ChevronDown } from "lucide-react";
 
 interface Props {
   images: string[];
   name?: string;
-  badge?: string; // e.g. "Best Seller"
+  badge?: string;
 }
 
 export default function GalleryClient({ images, name, badge }: Props) {
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const [localImages, setLocalImages] = useState<string[]>(images || []);
+  const [selectedIndex,  setSelectedIndex]  = useState(0);
+  const [canScrollDown,  setCanScrollDown]  = useState(false);
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const thumbContainerRef = useRef<HTMLDivElement>(null);
-  const [canScrollDown, setCanScrollDown] = useState(false);
+  const thumbContainerRef  = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (images && images.length > 0) setLocalImages(images);
-  }, [images]);
-
-  // Check if thumbs are scrollable
   useEffect(() => {
     const el = thumbContainerRef.current;
-    if (el) {
-      setCanScrollDown(el.scrollHeight > el.clientHeight);
-    }
-  }, [localImages]);
+    if (!el) return;
+    setCanScrollDown(el.scrollHeight > el.clientHeight);
+  }, [images]);
 
-  const handleThumbnailClick = (index: number) => {
+  const handleThumbnailClick = useCallback((index: number) => {
     setSelectedIndex(index);
-    // Scroll main image
-    if (scrollContainerRef.current) {
-      const width = scrollContainerRef.current.offsetWidth;
-      scrollContainerRef.current.scrollTo({
-        left: width * index,
-        behavior: "smooth",
-      });
-    }
-    // Scroll thumbnail into view
-    if (thumbContainerRef.current) {
-      const thumbEls = thumbContainerRef.current.querySelectorAll('button');
-      if (thumbEls[index]) {
-        thumbEls[index].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }
-    }
-  };
+    scrollContainerRef.current?.scrollTo({
+      left: (scrollContainerRef.current.offsetWidth) * index,
+      behavior: "smooth",
+    });
+    const thumbEls = thumbContainerRef.current?.querySelectorAll("button");
+    thumbEls?.[index]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, []);
 
-  const handleScroll = () => {
-    if (scrollContainerRef.current) {
-      const scrollLeft = scrollContainerRef.current.scrollLeft;
-      const width = scrollContainerRef.current.offsetWidth;
-      const newIndex = Math.round(scrollLeft / width);
-      if (newIndex !== selectedIndex && newIndex < localImages.length) {
-        setSelectedIndex(newIndex);
-      }
-    }
-  };
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const newIndex = Math.round(el.scrollLeft / el.offsetWidth);
+    setSelectedIndex((prev) =>
+      newIndex !== prev && newIndex < images.length ? newIndex : prev
+    );
+  }, [images.length]);
 
-  const scrollThumbsDown = () => {
-    if (thumbContainerRef.current) {
-      thumbContainerRef.current.scrollBy({ top: 156, behavior: 'smooth' });
-    }
-  };
+  const scrollThumbsDown = useCallback(() => {
+    thumbContainerRef.current?.scrollBy({ top: 156, behavior: "smooth" });
+  }, []);
+
+  if (!images || images.length === 0) {
+    return (
+      <div className="flex-1 aspect-square rounded-xl flex flex-col items-center justify-center text-zinc-300">
+        <ImageIcon size={48} strokeWidth={1} />
+        <span className="text-sm font-medium mt-2">No Image</span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col-reverse md:flex-row gap-3 w-full">
 
-      {/* ===================== THUMBNAILS (LEFT COLUMN — Desktop) ===================== */}
-      {localImages.length > 1 && (
+      {/* ── THUMBNAILS ── */}
+      {images.length > 1 && (
         <div className="flex md:flex-col items-center gap-0 flex-shrink-0">
-          {/* Scrollable thumb list */}
           <div
             ref={thumbContainerRef}
             className="
@@ -84,34 +73,32 @@ export default function GalleryClient({ images, name, badge }: Props) {
               [scrollbar-width:'none']
             "
           >
-            {localImages.map((img, i) => (
+            {images.map((img, i) => (
               <button
                 key={i}
                 onClick={() => handleThumbnailClick(i)}
                 className={`
                   relative flex-shrink-0
                   w-[64px] h-[68px] md:w-[72px] md:h-[76px]
-                  rounded-[6px] overflow-hidden
-                  bg-white
+                  rounded-xl overflow-hidden
                   border-2 transition-all duration-200
+                  shadow-[0_1px_6px_rgba(0,0,0,0.06)]
                   ${i === selectedIndex
-                    ? 'border-zinc-900 shadow-sm'
-                    : 'border-zinc-200 opacity-80 hover:opacity-100 hover:border-zinc-400'
-                  }
+                    ? "border-zinc-800 shadow-[0_2px_12px_rgba(0,0,0,0.12)]"
+                    : "border-zinc-100 opacity-70 hover:opacity-100 hover:border-zinc-300"}
                 `}
               >
                 <Image
                   src={img}
-                  alt={`Thumbnail ${i + 1}`}
+                  alt={`${name ?? "Product"} thumbnail ${i + 1}`}
                   fill
+                  sizes="72px"
                   className="object-contain p-[6px]"
-                  unoptimized={true}
                 />
               </button>
             ))}
           </div>
 
-          {/* Scroll Down indicator (only when more thumbs are hidden) */}
           {canScrollDown && (
             <button
               onClick={scrollThumbsDown}
@@ -123,17 +110,8 @@ export default function GalleryClient({ images, name, badge }: Props) {
         </div>
       )}
 
-      {/* ===================== MAIN IMAGE AREA ===================== */}
-      <div
-        className="
-          flex-1 relative
-          bg-[#f4f4f4]
-          rounded-xl overflow-hidden
-          aspect-square
-          md:max-h-[480px]
-        "
-      >
-        {/* Best Seller / Badge */}
+      {/* ── MAIN IMAGE — subtle border, no background box ── */}
+      <div className="flex-1 relative overflow-hidden aspect-square md:max-h-[480px] rounded-2xl border border-zinc-100 shadow-[0_2px_24px_rgba(0,0,0,0.06)]">
         {badge && (
           <div className="absolute top-3 left-3 z-10 pointer-events-none">
             <span className="inline-block bg-orange-400 text-white text-[11px] font-bold px-3 py-[5px] rounded-full shadow-sm tracking-wide">
@@ -142,46 +120,36 @@ export default function GalleryClient({ images, name, badge }: Props) {
           </div>
         )}
 
-        {/* Scrollable / Swipeable Image Strip */}
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
           className="flex w-full h-full overflow-x-auto snap-x snap-mandatory [&::-webkit-scrollbar]:hidden"
-          style={{ scrollBehavior: 'smooth' }}
+          style={{ scrollBehavior: "smooth" }}
         >
-          {localImages.length > 0 ? (
-            localImages.map((img, i) => (
-              <div
-                key={i}
-                className="w-full h-full flex-shrink-0 snap-center relative flex items-center justify-center"
-              >
-                <Image
-                  src={img}
-                  alt={`${name} - View ${i + 1}`}
-                  fill
-                  className="object-contain p-6 md:p-10"
-                  priority={i === 0}
-                  unoptimized={true}
-                />
-              </div>
-            ))
-          ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-zinc-300">
-              <ImageIcon size={48} strokeWidth={1} />
-              <span className="text-sm font-medium mt-2">No Image</span>
+          {images.map((img, i) => (
+            <div
+              key={i}
+              className="w-full h-full flex-shrink-0 snap-center relative flex items-center justify-center"
+            >
+              <Image
+                src={img}
+                alt={`${name ?? "Product"} — view ${i + 1}`}
+                fill
+                sizes="(max-width: 768px) 100vw, 50vw"
+                className="object-contain p-4 md:p-8"
+                priority={i === 0}
+              />
             </div>
-          )}
+          ))}
         </div>
 
-        {/* Mobile Dots Indicator */}
-        {localImages.length > 1 && (
+        {/* Mobile dot indicators */}
+        {images.length > 1 && (
           <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5 md:hidden">
-            {localImages.map((_, i) => (
+            {images.map((_, i) => (
               <div
                 key={i}
-                className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                  i === selectedIndex ? 'bg-zinc-900' : 'bg-zinc-300'
-                }`}
+                className={`w-1.5 h-1.5 rounded-full transition-colors ${i === selectedIndex ? "bg-zinc-900" : "bg-zinc-300"}`}
               />
             ))}
           </div>

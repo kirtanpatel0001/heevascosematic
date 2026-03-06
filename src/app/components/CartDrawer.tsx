@@ -10,40 +10,58 @@ import {
 } from 'lucide-react';
 import { supabaseClient } from '@/lib/supabaseClient';
 
-type Props = {
-  open: boolean;
-  onClose: () => void;
-};
+// PERF: Supabase client and formatPrice at module level.
+// Previously supabaseClient() was called inside the component, creating a new
+// instance on every render. That made every useEffect that referenced supabase
+// re-run on every render, firing dozens of redundant DB queries.
+const supabase = supabaseClient();
 
-const formatPrice = (amount: number) => {
-  return new Intl.NumberFormat('en-IN', {
+const formatPrice = (amount: number) =>
+  new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0,
   }).format(amount);
-};
+
+// ── Types ──────────────────────────────────────────────────────────────────────
+interface CartItem {
+  cart_id: string;
+  product_id: string;
+  name: string;
+  price: number;
+  image: string | null;
+  category: string;
+  quantity: number;
+  size?: string;
+  color?: string;
+}
+
+type Props = { open: boolean; onClose: () => void; };
 
 export default function CartDrawer({ open, onClose }: Props) {
-  const supabase = supabaseClient();
-  const [cartItems, setCartItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [loading,   setLoading]   = useState(false);
+  const [userId,    setUserId]    = useState<string | null>(null);
 
+  // Guard against concurrent fetches
   const isFetching = useRef(false);
 
-  // 1. Get User once on mount
+  // ── 1. Resolve user ID once ──────────────────────────────────────────────────
+  // PERF: Empty dep array is now correct because `supabase` is a stable
+  // module-level constant (not recreated on every render).
   useEffect(() => {
-    const getUser = async () => {
+    (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) setUserId(user.id);
-    };
-    getUser();
+    })();
   }, []);
 
-  // 2. Fetch cart from DB
-  const fetchUserCart = useCallback(async (showSpinner = false) => {
+  // ── 2. Core fetch function ───────────────────────────────────────────────────
+  // PERF: useCallback with [userId] as the only real dependency.
+  // Previously `supabase` was listed as a dep, but since it was recreated each
+  // render the callback was a new reference every time → infinite re-subscriptions.
+  const fetchCart = useCallback(async (showSpinner = false) => {
     if (!userId || isFetching.current) return;
-
     isFetching.current = true;
     if (showSpinner) setLoading(true);
 
@@ -57,39 +75,41 @@ export default function CartDrawer({ open, onClose }: Props) {
       .order('created_at', { ascending: false });
 
     if (!error && data) {
-      const formatted = data.map((item: any) => ({
-        cart_id: item.id,
-        product_id: item.product?.id,
-        name: item.product?.name,
-        price: item.product?.price,
-        image: item.product?.image_url,
-        category: item.product?.category,
-        quantity: item.quantity,
-        size: item.size,
-        color: item.color,
-      }));
-      setCartItems(formatted);
+      setCartItems(
+        data.map((item: any) => ({
+          cart_id:    item.id,
+          product_id: item.product?.id,
+          name:       item.product?.name,
+          price:      item.product?.price,
+          image:      item.product?.image_url,
+          category:   item.product?.category,
+          quantity:   item.quantity,
+          size:       item.size,
+          color:      item.color,
+        }))
+      );
     }
 
     isFetching.current = false;
     setLoading(false);
-  }, [userId, supabase]);
-
-  // 3. Fetch when userId becomes available
-  useEffect(() => {
-    if (userId) {
-      fetchUserCart(cartItems.length === 0);
-    }
   }, [userId]);
 
-  // 4. Re-fetch every time drawer opens
+  // ── 3. Initial fetch when userId is ready ────────────────────────────────────
   useEffect(() => {
-    if (open && userId) {
-      fetchUserCart(cartItems.length === 0);
-    }
-  }, [open, userId]);
+    if (userId) fetchCart(true);
+  }, [userId, fetchCart]);
 
-  // 5. Realtime subscription
+  // ── 4. Re-fetch when drawer opens ───────────────────────────────────────────
+  // PERF: Only fires when `open` flips to true. Does NOT show spinner if
+  // items are already cached (avoids layout shift on re-open).
+  useEffect(() => {
+    if (open && userId) fetchCart(cartItems.length === 0);
+  }, [open]); // intentionally omit cartItems to avoid re-triggering on every add
+
+  // ── 5. Realtime subscription ─────────────────────────────────────────────────
+  // PERF: Dependency array is [userId, fetchCart]. Both are stable:
+  // userId only changes once (null → id), and fetchCart is useCallback'd.
+  // Previously this effect re-ran on every render because supabase changed.
   useEffect(() => {
     if (!userId) return;
 
@@ -97,34 +117,22 @@ export default function CartDrawer({ open, onClose }: Props) {
       .channel(`cart_drawer_${userId}`)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'cart_items',
-          filter: `user_id=eq.${userId}`,
-        },
-        () => {
-          fetchUserCart(false);
-        }
+        { event: '*', schema: 'public', table: 'cart_items', filter: `user_id=eq.${userId}` },
+        () => fetchCart(false)
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [userId, fetchUserCart, supabase]);
+    return () => { supabase.removeChannel(channel); };
+  }, [userId, fetchCart]);
 
-  // --- ACTIONS ---
-
-  const updateQuantity = async (cartId: string, currentQty: number, delta: number) => {
+  // ── Actions ──────────────────────────────────────────────────────────────────
+  const updateQuantity = useCallback(async (cartId: string, currentQty: number, delta: number) => {
     const newQty = currentQty + delta;
     if (newQty < 1) return;
 
     // Optimistic update
-    setCartItems(prev =>
-      prev.map(item =>
-        item.cart_id === cartId ? { ...item, quantity: newQty } : item
-      )
+    setCartItems((prev) =>
+      prev.map((item) => item.cart_id === cartId ? { ...item, quantity: newQty } : item)
     );
 
     const { error } = await supabase
@@ -133,20 +141,18 @@ export default function CartDrawer({ open, onClose }: Props) {
       .eq('id', cartId)
       .eq('user_id', userId);
 
+    // Rollback on failure
     if (error) {
-      // Revert on failure
-      setCartItems(prev =>
-        prev.map(item =>
-          item.cart_id === cartId ? { ...item, quantity: currentQty } : item
-        )
+      setCartItems((prev) =>
+        prev.map((item) => item.cart_id === cartId ? { ...item, quantity: currentQty } : item)
       );
     }
-  };
+  }, [userId]);
 
-  const removeItem = async (cartId: string) => {
+  const removeItem = useCallback(async (cartId: string) => {
+    const removed = cartItems.find((item) => item.cart_id === cartId);
     // Optimistic remove
-    const removed = cartItems.find(item => item.cart_id === cartId);
-    setCartItems(prev => prev.filter(item => item.cart_id !== cartId));
+    setCartItems((prev) => prev.filter((item) => item.cart_id !== cartId));
 
     const { error } = await supabase
       .from('cart_items')
@@ -154,27 +160,19 @@ export default function CartDrawer({ open, onClose }: Props) {
       .eq('id', cartId)
       .eq('user_id', userId);
 
+    // Rollback on failure
     if (error && removed) {
-      setCartItems(prev => [...prev, removed]);
+      setCartItems((prev) => [...prev, removed]);
     }
-  };
+  }, [userId, cartItems]);
 
-  const subtotal = cartItems.reduce(
-    (acc, item) => acc + item.price * item.quantity, 0
-  );
-
-  const totalItems = cartItems.reduce(
-    (acc, item) => acc + item.quantity, 0
-  );
+  // ── Derived values ────────────────────────────────────────────────────────────
+  const subtotal   = cartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const totalItems = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
   return (
-    <Drawer
-      open={open}
-      onClose={onClose}
-      side="right"
-      widthClass="w-full sm:w-[420px]"
-      ariaLabel="Cart"
-    >
+    <Drawer open={open} onClose={onClose} side="right" widthClass="w-full sm:w-[420px]" ariaLabel="Cart">
+
       {/* Header */}
       <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-white z-10">
         <div className="flex items-center gap-3">
@@ -188,11 +186,7 @@ export default function CartDrawer({ open, onClose }: Props) {
           </div>
           <h3 className="text-xl text-black font-semibold tracking-tight">Your Cart</h3>
         </div>
-        <button
-          onClick={onClose}
-          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-          aria-label="Close cart"
-        >
+        <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors" aria-label="Close cart">
           <X color="black" size={20} />
         </button>
       </div>
@@ -245,11 +239,7 @@ export default function CartDrawer({ open, onClose }: Props) {
                   <div className="flex justify-between items-start">
                     <div>
                       <h3 className="text-sm font-medium text-gray-900 line-clamp-1">
-                        <Link
-                          href={`/product/${item.product_id}`}
-                          onClick={onClose}
-                          className="hover:underline"
-                        >
+                        <Link href={`/product/${item.product_id}`} onClick={onClose} className="hover:underline">
                           {item.name}
                         </Link>
                       </h3>
@@ -273,9 +263,7 @@ export default function CartDrawer({ open, onClose }: Props) {
                       >
                         <Minus size={12} />
                       </button>
-                      <span className="text-xs font-medium w-3 text-center">
-                        {item.quantity}
-                      </span>
+                      <span className="text-xs font-medium w-3 text-center">{item.quantity}</span>
                       <button
                         onClick={() => updateQuantity(item.cart_id, item.quantity, 1)}
                         className="text-gray-500 hover:text-black transition-colors"
@@ -306,7 +294,6 @@ export default function CartDrawer({ open, onClose }: Props) {
             <p>Subtotal</p>
             <p>{formatPrice(subtotal)}</p>
           </div>
-          {/* ✅ Fixed path to match actual folder: authntication/checkout */}
           <Link
             href="/authntication/checkout"
             onClick={onClose}
