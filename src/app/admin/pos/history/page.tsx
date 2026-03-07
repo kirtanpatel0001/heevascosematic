@@ -1,7 +1,7 @@
 export const runtime = 'nodejs';
 
 import { supabaseServer } from '@/lib/supabaseServer';
-import { BadgeCheck, Banknote, CreditCard, Calendar, ShoppingBag } from 'lucide-react';
+import { Banknote, CreditCard, Calendar, ShoppingBag } from 'lucide-react';
 
 export default async function POSHistoryPage() {
   const supabase = await supabaseServer();
@@ -37,8 +37,15 @@ export default async function POSHistoryPage() {
           </thead>
           <tbody>
             {sales?.map((sale) => {
-              // Parse items if they are stored as a JSON string, or use directly if JSONB
-              const items = typeof sale.items === 'string' ? JSON.parse(sale.items) : sale.items;
+              // Defensive parse in case of malformed historical rows.
+              let items: unknown = sale.items;
+              if (typeof sale.items === 'string') {
+                try {
+                  items = JSON.parse(sale.items);
+                } catch {
+                  items = [];
+                }
+              }
 
               return (
                 <tr key={sale.id} className="bg-white border-b border-gray-50 hover:bg-gray-50/50">
@@ -60,7 +67,7 @@ export default async function POSHistoryPage() {
                   <td className="px-6 py-4 text-gray-600">
                     <div className="flex flex-col gap-1">
                       {Array.isArray(items) && items.length > 0 ? (
-                        items.map((item: any, index: number) => (
+                        items.map((item: { name?: string; product_name?: string; quantity?: number }, index: number) => (
                           <div key={index} className="flex items-center gap-1 text-xs">
                              <ShoppingBag size={10} className="text-gray-400" />
                              <span className="font-medium">{item.name || item.product_name || 'Item'}</span>

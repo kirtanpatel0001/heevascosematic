@@ -1,11 +1,9 @@
 export const runtime = 'nodejs';
 
-import { requireAdmin } from '@/lib/requireAdmin';
 import { supabaseServer } from '@/lib/supabaseServer';
 import StaffClient from './StaffClient';
 
 export default async function StaffPage() {
-  await requireAdmin();
   const supabase = await supabaseServer();
 
   const { data: staff } = await supabase

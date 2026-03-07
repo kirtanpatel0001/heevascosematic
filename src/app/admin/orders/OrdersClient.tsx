@@ -45,7 +45,7 @@ export default function OrdersClient({ initialOrders }: Props) {
   const supabase = supabaseClient();
 
   const [orders, setOrders] = useState<Order[]>(initialOrders);
-  const [loading, setLoading] = useState(false);
+  const loading = false;
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [currentPage, setCurrentPage] = useState(1);
@@ -55,16 +55,6 @@ export default function OrdersClient({ initialOrders }: Props) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
-
-  const fetchOrders = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (!error && data) setOrders(data as Order[]);
-    setLoading(false);
-  };
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -115,7 +105,7 @@ export default function OrdersClient({ initialOrders }: Props) {
       .select('quantity, price, product:products (name, image_url, category)')
       .eq('order_id', order.id);
     if (!error && data) {
-      setSelectedOrder(prev => prev ? { ...prev, items: data as any } : null);
+      setSelectedOrder(prev => prev ? { ...prev, items: data as OrderItem[] } : null);
     }
     setItemsLoading(false);
   };
@@ -127,8 +117,15 @@ export default function OrdersClient({ initialOrders }: Props) {
     if (selectedOrder?.id === id) setSelectedOrder(s => s ? { ...s, status: newStatus } : null);
     setOpenDropdownId(null);
 
-    const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', id);
-    if (error) {
+    try {
+      const res = await fetch('/api/admin/orders/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: id, status: newStatus }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Failed to update status.');
+    } catch {
       alert('Failed to update status.');
       setOrders(prev);
     }
@@ -142,7 +139,7 @@ export default function OrdersClient({ initialOrders }: Props) {
     return 'Guest Customer';
   };
 
-  const getCustomerPhone = (o: Order) => (o.shipping_address as any)?.phone || '-';
+  const getCustomerPhone = (o: Order) => o.shipping_address?.phone || '-';
 
   const getFullAddress = (o: Order) => {
     if (!o.shipping_address) return 'No Address';
@@ -398,7 +395,7 @@ export default function OrdersClient({ initialOrders }: Props) {
                       <div key={i} className="flex items-center gap-4 p-3 border border-slate-100 rounded-xl bg-slate-50/50">
                         <div className="h-12 w-12 bg-white rounded-lg border border-slate-200 relative overflow-hidden flex-shrink-0">
                           {item.product?.image_url ? (
-                            <Image src={item.product.image_url} alt={item.product.name} fill className="object-cover" unoptimized />
+                            <Image src={item.product.image_url} alt={item.product.name} fill className="object-cover" />
                           ) : (
                             <div className="flex items-center justify-center h-full text-slate-300">
                               <ImageOff size={16} />

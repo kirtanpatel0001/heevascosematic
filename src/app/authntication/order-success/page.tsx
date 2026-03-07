@@ -155,7 +155,7 @@ function OrderSuccessContent() {
 
         const { data: settingsData } = await supabase
           .from('store_settings')
-          .select('*')
+          .select('store_name, support_email, support_phone, currency, tax_name, tax_rate, delivery_charge, free_shipping_threshold')
           .eq('id', 1)
           .single();
 
@@ -164,7 +164,7 @@ function OrderSuccessContent() {
         // ✅ Fixed: filter by user_id to prevent order peeking
         const { data: orderData, error: orderError } = await supabase
           .from('orders')
-          .select('*')
+          .select('id, created_at, total_amount, status, payment_method, shipping_address')
           .eq('id', orderId)
           .eq('user_id', user.id)
           .single();
@@ -179,8 +179,9 @@ function OrderSuccessContent() {
         if (itemsError) throw itemsError;
 
         setOrder({ ...orderData, items: items || [] });
-      } catch (err: any) {
-        setError(err.message || 'Order details could not be loaded.');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Order details could not be loaded.';
+        setError(message);
       } finally {
         setLoading(false);
       }
@@ -203,7 +204,7 @@ function OrderSuccessContent() {
         <AlertCircle size={48} className="text-red-500" />
         <h2 className="text-2xl font-bold">Order Not Found</h2>
         <p className="text-gray-500 text-sm">{error}</p>
-        <Link href="/shop" className="text-blue-600 hover:underline text-sm">Return to Shop</Link>
+        <Link href="/authntication/shop" className="text-blue-600 hover:underline text-sm">Return to Shop</Link>
       </div>
     );
   }
@@ -282,7 +283,6 @@ function OrderSuccessContent() {
                   fileName={`invoice-${order.id.slice(0, 6)}.pdf`}
                   className="w-full block"
                 >
-                  {/* @ts-ignore */}
                   {({ loading: pdfLoading }) => (
                     <button
                       disabled={pdfLoading}
@@ -332,7 +332,7 @@ function OrderSuccessContent() {
 
             {/* ✅ Fixed: consistent shop path */}
             <Link
-              href="/shop"
+              href="/authntication/shop"
               className="flex items-center justify-center gap-2 text-gray-500 hover:text-black transition py-2 font-bold text-sm"
             >
               Continue Shopping <ArrowRight size={16} />

@@ -1,11 +1,9 @@
 export const runtime = 'nodejs';
 
-import { requireAdmin } from '@/lib/requireAdmin';
 import { supabaseServer } from '@/lib/supabaseServer';
 import DashboardClient from './DashboardClient';
 
 export default async function DashboardPage() {
-  await requireAdmin();
   const supabase = await supabaseServer();
 
   const now = new Date();

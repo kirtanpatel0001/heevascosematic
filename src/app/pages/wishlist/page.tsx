@@ -126,7 +126,7 @@ export default function ShopPage() {
 
   // --- FILTER LOGIC ---
   const filteredProducts = useMemo(() => {
-    let result = products.filter((p) => {
+    const result = products.filter((p) => {
       const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
       const matchesHairType = selectedHairType === 'All' || p.hair_type === selectedHairType;

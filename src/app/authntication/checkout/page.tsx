@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { supabaseClient } from '@/lib/supabaseClient';
 import { createOrder, initiateRazorpay } from '@/app/auth/logout/checkout.actions';
 import { validateCoupon } from '@/app/actions/couponActions';
+import type { LucideIcon } from 'lucide-react';
 import {
   Loader2, Receipt, MapPin, User, Phone, Building2, Navigation, Flag,
   Home, ShieldCheck, AlertCircle, Save, CheckCircle2, Trash2, Briefcase,
@@ -21,6 +22,14 @@ interface CartItem {
   product: { id: string; name: string; price: number; image_url: string | null };
   size?: string | null;
   color?: string | null;
+}
+
+interface CartRow {
+  id: string;
+  quantity: number;
+  size?: string | null;
+  color?: string | null;
+  product: CartItem['product'] | CartItem['product'][];
 }
 
 interface StoreSettings {
@@ -51,6 +60,30 @@ interface AppliedCoupon {
   description: string | null;
 }
 
+interface RazorpaySuccessResponse {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}
+
+interface RazorpayOptions {
+  key: string | undefined;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  handler: (response: RazorpaySuccessResponse) => Promise<void>;
+  prefill: { name: string; contact: string };
+  theme: { color: string };
+  modal: { ondismiss: () => void };
+}
+
+type RazorpayConstructor = new (options: RazorpayOptions) => { open: () => void };
+
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
+
 // ── Helpers ────────────────────────────────────────────────────
 const fmt = (currency: string, n: number) =>
   `${currency} ${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -61,7 +94,12 @@ function calcDiscount(subtotal: number, value: number, type: string): number {
 }
 
 // ── Input Field ────────────────────────────────────────────────
-const InputField = ({ icon: Icon, className, ...props }: any) => (
+type InputFieldProps = React.InputHTMLAttributes<HTMLInputElement> & {
+  icon: LucideIcon;
+  className?: string;
+};
+
+const InputField = ({ icon: Icon, className, ...props }: InputFieldProps) => (
   <div className={`relative ${className || ''}`}>
     <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
       <Icon size={16} />
@@ -121,7 +159,8 @@ export default function CheckoutPage() {
   // ── Refresh addresses ────────────────────────────────────────
   const refreshAddresses = async (userId: string) => {
     const { data } = await supabase
-      .from('addresses').select('*')
+      .from('addresses')
+      .select('id, label, house_no, street, landmark, city, state, pincode')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
     if (data) setAddresses(data);
@@ -133,18 +172,24 @@ export default function CheckoutPage() {
       try {
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         if (authError || !user) {
-          router.replace('/authntication/login?redirect=/authntication/checkout');
+          router.replace('/auth/login?redirect=/authntication/checkout');
           return;
         }
 
         const [settingsRes, profileRes, cartRes, addressRes] = await Promise.all([
-          supabase.from('store_settings').select('*').eq('id', 1).single(),
+          supabase
+            .from('store_settings')
+            .select('store_name, currency, delivery_charge, free_shipping_threshold, tax_name, tax_rate')
+            .eq('id', 1)
+            .single(),
           supabase.from('profiles').select('full_name, phone').eq('id', user.id).single(),
           supabase.from('cart_items')
             .select('id, quantity, size, color, product:products(id, name, price, image_url)')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false }),
-          supabase.from('addresses').select('*')
+          supabase
+            .from('addresses')
+            .select('id, label, house_no, street, landmark, city, state, pincode')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false }),
         ]);
@@ -162,8 +207,9 @@ export default function CheckoutPage() {
         }
 
         if (cartRes.data) {
-          if (cartRes.data.length === 0) { router.replace('/shop'); return; }
-          setCartItems(cartRes.data.map((i: any) => ({
+          if (cartRes.data.length === 0) { router.replace('/authntication/shop'); return; }
+          const rows = cartRes.data as CartRow[];
+          setCartItems(rows.map((i) => ({
             id: i.id, quantity: i.quantity, size: i.size, color: i.color,
             product: Array.isArray(i.product) ? i.product[0] : i.product,
           })));
@@ -175,7 +221,7 @@ export default function CheckoutPage() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [router, supabase]);
 
   // ── Address handlers ─────────────────────────────────────────
   const handleAddressSelect = (id: string) => {
@@ -265,7 +311,7 @@ export default function CheckoutPage() {
         setSuccessMsg('Address updated!');
       }
       await refreshAddresses(user.id);
-    } catch (e: any) { setErrorMsg(e.message); }
+    } catch (e: unknown) { setErrorMsg(getErrorMessage(e, 'Failed to save address.')); }
     finally { setSavingAddress(false); }
   };
 
@@ -277,8 +323,10 @@ export default function CheckoutPage() {
       const c = await validateCoupon(couponInput);
       const disc = calcDiscount(subtotal, c.discount_value, c.discount_type);
       setAppliedCoupon(c); setDiscountAmount(disc);
-    } catch (e: any) {
-      setCouponError(e.message); setAppliedCoupon(null); setDiscountAmount(0);
+    } catch (e: unknown) {
+      setCouponError(getErrorMessage(e, 'Failed to apply coupon.'));
+      setAppliedCoupon(null);
+      setDiscountAmount(0);
     } finally { setCouponLoading(false); }
   };
 
@@ -326,24 +374,23 @@ export default function CheckoutPage() {
 
       const orderData = await initiateRazorpay(appliedCoupon?.code);
 
-      const options = {
+      const options: RazorpayOptions = {
         key:         process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount:      orderData.amount,
         currency:    orderData.currency,
         name:        settings?.store_name || 'HEEVAS',
         description: 'Order Payment',
         order_id:    orderData.id,
-        handler: async (response: any) => {
+        handler: async (response: RazorpaySuccessResponse) => {
           fd.set('paymentMethod',        'card');
           fd.set('razorpay_payment_id',   response.razorpay_payment_id);
           fd.set('razorpay_order_id',     response.razorpay_order_id);
           fd.set('razorpay_signature',    response.razorpay_signature);
           try {
-            await createOrder(fd);
-            router.push(`/authntication/order-success?id=${orderData.id}`);
-          } catch (err: any) {
-            if (err?.message?.includes('NEXT_REDIRECT')) return;
-            setErrorMsg(err.message || 'Payment verification failed.');
+            const result = await createOrder(fd);
+            router.push(`/authntication/order-success?id=${result.orderId}`);
+          } catch (err: unknown) {
+            setErrorMsg(getErrorMessage(err, 'Payment verification failed.'));
             setSubmitting(false);
           }
         },
@@ -352,10 +399,12 @@ export default function CheckoutPage() {
         modal:   { ondismiss: () => setSubmitting(false) },
       };
 
-      const rzp = new (window as any).Razorpay(options);
+      const Razorpay = (window as Window & { Razorpay?: RazorpayConstructor }).Razorpay;
+      if (!Razorpay) throw new Error('Payment gateway failed to load.');
+      const rzp = new Razorpay(options);
       rzp.open();
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Something went wrong.');
+    } catch (err: unknown) {
+      setErrorMsg(getErrorMessage(err, 'Something went wrong.'));
       setSubmitting(false);
     }
   };

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Mail,
   Lock,
@@ -14,9 +14,11 @@ import {
 } from 'lucide-react';
 import { supabaseClient } from '@/lib/supabaseClient';
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = supabaseClient();
+  const redirectTo = useMemo(() => searchParams.get('redirect'), [searchParams]);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,50 +26,60 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    router.prefetch('/');
+    router.prefetch('/admin');
+  }, [router]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      // 1️⃣ Sign in
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      if (signInError) throw signInError;
 
       const user = data.user;
 
-      // 2️⃣ Email verification check
       if (!user?.email_confirmed_at) {
         await supabase.auth.resend({
           type: 'signup',
           email,
         });
-        router.push('/auth/verify');
+        router.replace('/auth/verify');
         return;
       }
 
-      // 3️⃣ Fetch role for UI redirect only
-      // Real protection is handled by middleware
+      // Keep login fast when caller already provided the target route.
+      if (redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')) {
+        router.replace(redirectTo);
+        router.refresh();
+        return;
+      }
+
+      // Resolve role only for default login landing.
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
       if (profileError) throw profileError;
 
-      // 4️⃣ Redirect based on role (UI only — middleware enforces real protection)
-      if (profile.role === 'admin') {
-        router.push('/admin');
+      if (profile?.role === 'admin') {
+        router.replace('/admin');
       } else {
-        router.push('/');
+        router.replace('/');
       }
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
+      router.refresh();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Login failed';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -160,7 +172,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-6 text-center text-sm text-gray-500">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Link
             href="/auth/signup"
             className="font-semibold text-black hover:underline"
@@ -170,5 +182,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#F9FAFB]" />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

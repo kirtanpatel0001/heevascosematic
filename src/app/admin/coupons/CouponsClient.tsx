@@ -35,6 +35,9 @@ interface Props {
   initialCoupons: Coupon[];
 }
 
+const generateCouponCode = () =>
+  Math.random().toString(36).substring(2, 8).toUpperCase();
+
 // ── Modal for creating a new coupon ──────────────────────────
 function CreateCouponModal({
   onClose,
@@ -50,13 +53,13 @@ function CreateCouponModal({
   }) => Promise<void>;
 }) {
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    code: Math.random().toString(36).substring(2, 8).toUpperCase(),
+  const [form, setForm] = useState(() => ({
+    code: generateCouponCode(),
     discount_value: 20,
     discount_type: 'percentage',
     usage_limit: 50,
     description: '',
-  });
+  }));
 
   const handle = async () => {
     setSaving(true);
@@ -95,7 +98,7 @@ function CreateCouponModal({
                 className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-mono font-bold uppercase tracking-widest focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-black"
               />
               <button
-                onClick={() => setForm(f => ({ ...f, code: Math.random().toString(36).substring(2, 8).toUpperCase() }))}
+                onClick={() => setForm(f => ({ ...f, code: generateCouponCode() }))}
                 className="px-3 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-xs font-bold text-slate-600 transition-colors whitespace-nowrap"
               >
                 Randomize

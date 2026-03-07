@@ -5,7 +5,6 @@ import {
   Search, Trash2, Loader2, User, ShieldCheck, Eye,
   X, MapPin, Ban, Unlock, Mail, Phone, AlertCircle
 } from 'lucide-react';
-import { supabaseClient } from '@/lib/supabaseClient';
 
 interface Address {
   id: string;
@@ -35,38 +34,32 @@ interface Props {
 }
 
 export default function CustomersClient({ initialUsers }: Props) {
-  const supabase = supabaseClient();
-
   const [users, setUsers] = useState<Profile[]>(initialUsers);
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const loading = false;
+  const errorMsg: string | null = null;
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<Profile | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const fetchUsers = async () => {
-    setLoading(true);
-    setErrorMsg(null);
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*, addresses(*)')
-      .order('created_at', { ascending: false });
-    if (error) setErrorMsg(error.message);
-    else setUsers(data || []);
-    setLoading(false);
-  };
-
   const handleDelete = async (id: string) => {
     if (!confirm('WARNING: This will delete the user and their data. Are you sure?')) return;
     setActionLoading(true);
-    const { error } = await supabase.from('profiles').delete().eq('id', id);
-    if (error) {
-      alert('Delete Failed: ' + error.message);
-    } else {
+    try {
+      const res = await fetch('/api/admin/customers/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: id }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Delete failed.');
+
       setUsers(prev => prev.filter(u => u.id !== id));
       setIsModalOpen(false);
       setSelectedUser(null);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Delete failed.';
+      alert('Delete Failed: ' + message);
     }
     setActionLoading(false);
   };
@@ -75,12 +68,20 @@ export default function CustomersClient({ initialUsers }: Props) {
     const newStatus = !user.is_blocked;
     if (!confirm(`Are you sure you want to ${newStatus ? 'BLOCK' : 'UNBLOCK'} this user?`)) return;
     setActionLoading(true);
-    const { error } = await supabase.from('profiles').update({ is_blocked: newStatus }).eq('id', user.id);
-    if (error) {
-      alert(`Error: ${error.message}`);
-    } else {
+    try {
+      const res = await fetch('/api/admin/customers/block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, isBlocked: newStatus }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Failed to update user status.');
+
       setUsers(prev => prev.map(u => u.id === user.id ? { ...u, is_blocked: newStatus } : u));
       if (selectedUser?.id === user.id) setSelectedUser(prev => prev ? { ...prev, is_blocked: newStatus } : null);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to update user status.';
+      alert(`Error: ${message}`);
     }
     setActionLoading(false);
   };

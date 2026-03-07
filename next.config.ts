@@ -15,14 +15,30 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // Apply these headers to all routes
-        source: '/:path*',
+        // Avoid caching auth/admin HTML where stale session or chunk references hurt UX.
+        source: '/admin/:path*',
         headers: [
           {
             key: 'Cache-Control',
-            // This tells the browser: "Never store the HTML file. Always ask the server for the latest version."
-            // This prevents the browser from looking for old .js chunks that no longer exist.
             value: 'no-store, must-revalidate', 
+          },
+        ],
+      },
+      {
+        source: '/auth/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, must-revalidate',
+          },
+        ],
+      },
+      {
+        source: '/authntication/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, must-revalidate',
           },
         ],
       },

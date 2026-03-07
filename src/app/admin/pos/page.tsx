@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { createBrowserClient } from '@supabase/ssr';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   Search, ShoppingCart, Trash2, Plus, Minus, 
   CreditCard, Banknote, Loader2, PackageX, User, Phone 
 } from 'lucide-react';
 import Image from 'next/image';
+import { supabaseClient } from '@/lib/supabaseClient';
+import { createPosSale } from './pos.actions';
 
 type Product = {
   id: string;
@@ -21,11 +22,10 @@ type CartItem = Product & {
   cartQuantity: number;
 };
 
+const PAYMENT_METHODS = ['CASH', 'UPI', 'CARD'] as const;
+
 export default function POSTerminal() {
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  const supabase = supabaseClient();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -37,13 +37,9 @@ export default function POSTerminal() {
   // Customer Data
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'UPI' | 'CARD'>('CASH');
+  const [paymentMethod, setPaymentMethod] = useState<(typeof PAYMENT_METHODS)[number]>('CASH');
 
-  useEffect(() => {
-    fetchProducts();
-  }, []);
-
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from('products')
@@ -54,7 +50,11 @@ export default function POSTerminal() {
     
     if (data) setProducts(data);
     setLoading(false);
-  };
+  }, [supabase]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
   const addToCart = (product: Product) => {
     setCart((prev) => {
@@ -97,35 +97,27 @@ export default function POSTerminal() {
     setProcessing(true);
 
     try {
-      // 1. Insert into new 'pos_sales' table
-      const { error: salesError } = await supabase
-        .from('pos_sales')
-        .insert({
-          customer_name: customerName,
-          customer_phone: customerPhone,
-          total_amount: subTotal,
-          payment_method: paymentMethod,
-          items: cart // Saving the entire cart as JSON
-        });
-
-      if (salesError) throw salesError;
-
-      // 2. Reduce Stock in 'products' table
-      for (const item of cart) {
-        const newStock = item.stock - item.cartQuantity;
-        await supabase.from('products').update({ stock: newStock }).eq('id', item.id);
-      }
+      const result = await createPosSale({
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        paymentMethod,
+        items: cart.map((item) => ({
+          productId: item.id,
+          quantity: item.cartQuantity,
+        })),
+      });
 
       setCart([]);
       setCustomerName('');
       setCustomerPhone('');
-      setSuccessMsg('Order Placed Successfully!');
+      setSuccessMsg(`Order #${result.saleId.slice(0, 8)} Placed Successfully!`);
       fetchProducts(); // Refresh stock
       setTimeout(() => setSuccessMsg(''), 3000);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      alert('Checkout Failed: ' + error.message);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      alert('Checkout Failed: ' + message);
     } finally {
       setProcessing(false);
     }
@@ -162,7 +154,7 @@ export default function POSTerminal() {
                 >
                   <div className="relative w-full aspect-square bg-white rounded-lg mb-3 overflow-hidden border border-gray-100">
                     {product.image_url ? (
-                      <Image src={product.image_url} alt={product.name} fill className="object-cover" unoptimized={true} />
+                      <Image src={product.image_url} alt={product.name} fill className="object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-300"><PackageX size={24} /></div>
                     )}
@@ -216,8 +208,8 @@ export default function POSTerminal() {
 
         <div className="p-4 bg-gray-50 border-t border-gray-100">
           <div className="grid grid-cols-3 gap-2 mb-4">
-            {['CASH', 'UPI', 'CARD'].map((m) => (
-              <button key={m} onClick={() => setPaymentMethod(m as any)}
+            {PAYMENT_METHODS.map((m) => (
+              <button key={m} onClick={() => setPaymentMethod(m)}
                 className={`text-xs font-medium py-2 rounded border flex flex-col items-center gap-1 ${paymentMethod === m ? 'bg-black text-white border-black' : 'bg-white text-gray-600 border-gray-200'}`}
               >
                 {m === 'CASH' ? <Banknote size={14}/> : <CreditCard size={14}/>} {m}

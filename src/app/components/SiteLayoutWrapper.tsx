@@ -8,14 +8,14 @@ import Footer from "./Footer";
 export default function SiteLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "";
 
-  // hide header/footer for admin routes
-  const isAdminRoute = pathname.startsWith("/admin");
+  // Hide global chrome on admin and auth pages for faster first paint.
+  const hideChrome = pathname.startsWith("/admin") || pathname.startsWith("/auth");
 
   return (
     <>
-      {!isAdminRoute && <Nav />}
+      {!hideChrome && <Nav />}
       <main className="overflow-x-hidden">{children}</main>
-      {!isAdminRoute && <Footer />}
+      {!hideChrome && <Footer />}
     </>
   );
 }

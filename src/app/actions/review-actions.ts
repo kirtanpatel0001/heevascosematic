@@ -10,6 +10,11 @@ export async function submitVerifiedReview(formData: FormData) {
   const productId = formData.get("productId") as string;
   const rating = parseInt(formData.get("rating") as string);
   const comment = formData.get("comment") as string;
+
+  if (!productId) return { error: "Invalid product." };
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) return { error: "Rating must be between 1 and 5." };
+  if (!comment?.trim()) return { error: "Review comment is required." };
+  if (comment.trim().length > 1500) return { error: "Review comment is too long." };
   
   // 1. Get User
   const { data: { user } } = await supabase.auth.getUser();
@@ -41,12 +46,27 @@ export async function submitVerifiedReview(formData: FormData) {
   }
 
   // 4. Handle Images
+  const MAX_IMAGES = 3;
+  const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+  const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+
   const imageFiles: File[] = [];
-  formData.forEach((value, key) => {
-    if (key.startsWith("image-") && value instanceof File && value.size > 0) {
-        imageFiles.push(value);
+  for (const [key, value] of formData.entries()) {
+    if (!key.startsWith("image-")) continue;
+    if (!(value instanceof File) || value.size <= 0) continue;
+
+    if (imageFiles.length >= MAX_IMAGES) {
+      return { error: `You can upload at most ${MAX_IMAGES} images.` };
     }
-  });
+    if (!ALLOWED_IMAGE_TYPES.has(value.type)) {
+      return { error: "Only JPG, PNG, and WEBP images are allowed." };
+    }
+    if (value.size > MAX_IMAGE_SIZE_BYTES) {
+      return { error: "Each image must be 5MB or smaller." };
+    }
+
+    imageFiles.push(value);
+  }
 
   let imageUrls: string[] = [];
   

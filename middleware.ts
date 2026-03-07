@@ -51,7 +51,11 @@ export async function middleware(req: NextRequest) {
   }
 
   // ✅ Protect user-only routes
-  const protectedPaths = ['/account', '/checkout', '/orders'];
+  const protectedPaths = [
+    '/authntication/account',
+    '/authntication/checkout',
+    '/authntication/order-success',
+  ];
   const isProtected = protectedPaths.some((path) =>
     req.nextUrl.pathname.startsWith(path)
   );
@@ -66,8 +70,8 @@ export async function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     '/admin/:path*',
-    '/account/:path*',
-    '/checkout/:path*',
-    '/orders/:path*',
+    '/authntication/account/:path*',
+    '/authntication/checkout/:path*',
+    '/authntication/order-success/:path*',
   ],
 };
