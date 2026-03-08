@@ -13,7 +13,7 @@ const HeevasUsingSection = () => {
       product: "Varnika Veda Hair Oil",
       desc: "Apply to roots and massage gently. Leave overnight or 1 hour before washing.",
       color: "from-amber-100 to-amber-50",
-      video: "/VIEDOS/1.mp4",
+      video: "/VIEDOS/Hair OIL.mp4",
       href: "/product/c3225a76-cfce-4bc0-aece-aa9acae89793",
     },
     {
@@ -23,7 +23,7 @@ const HeevasUsingSection = () => {
       product: "Misilk Shine / Argan Lavish Cleanser",
       desc: "Gently lather to cleanse without stripping natural oils.",
       color: "from-blue-100 to-blue-50",
-      video: "/VIEDOS/1.mp4",
+      video: "/VIEDOS/Misilk Shine  Argan Lavish Cleanser.mp4",
       href: "/product/4e0f78b3-0f23-4d65-9b0b-27f1e8fbe266",
     },
     {
@@ -33,8 +33,8 @@ const HeevasUsingSection = () => {
       product: "Argan Lavish Scalp Conditioner",
       desc: "Seal moisture and smooth the cuticle. Rinse with cool water.",
       color: "from-purple-100 to-purple-50",
-      video: "/VIEDOS/3.mp4",
-      href: "/product/e69dac74-f0d8-4d5c-96c8-b720f9629d11",
+      video: "/VIEDOS/Argan Lavish Scalp Conditioner.mp4",
+      href: "/product/880f3180-f861-4920-a8c3-7f299710a68f",
     },
     {
       id: 4,
@@ -43,7 +43,7 @@ const HeevasUsingSection = () => {
       product: "Argan Blossom Hair Mask",
       desc: "Apply mid-length to ends. Leave for 15 minutes.",
       color: "from-rose-100 to-rose-50",
-      video: "/VIEDOS/4.mp4",
+      video: "/VIEDOS/Argan Blossom Hair Mask.mp4",
       href: "/product/0d186b1d-fc8e-4cdc-8c30-e5717c94629c",
     },
   ];

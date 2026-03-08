@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Loader2, Sparkles } from 'lucide-react';
 import { supabaseClient } from '@/lib/supabaseClient';
 
 const OTP_COOLDOWN = 120;
@@ -75,8 +75,9 @@ export default function SignUpPage() {
 
       setStep(2);
       setCooldown(OTP_COOLDOWN);
-    } catch (err: any) {
-      setError(err.message || 'Failed to send OTP');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to send OTP';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -88,7 +89,6 @@ export default function SignUpPage() {
     setError('');
 
     try {
-      // ✅ Fixed: 6 digits to match Supabase default
       if (otp.length !== 6) {
         throw new Error('OTP must be 6 digits');
       }
@@ -96,14 +96,15 @@ export default function SignUpPage() {
       const { error } = await supabase.auth.verifyOtp({
         email: formData.email,
         token: otp,
-        type: 'email', // ✅ Fixed: matches signInWithOtp type
+        type: 'email',
       });
 
       if (error) throw error;
 
       router.push('/auth/login');
-    } catch (err: any) {
-      setError(err.message || 'Invalid or expired OTP');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Invalid or expired OTP';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -112,6 +113,19 @@ export default function SignUpPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-white px-4">
       <div className="w-full max-w-[420px] border border-black rounded-xl p-8">
+
+        {/* ── Back to Home ── */}
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-black transition-colors mb-6 group"
+        >
+          <ArrowLeft
+            size={13}
+            className="group-hover:-translate-x-0.5 transition-transform"
+          />
+          Back to Home
+        </Link>
+
         {error && (
           <div className="mb-4 border border-black text-black text-xs p-3 text-center">
             {error}
@@ -187,7 +201,7 @@ export default function SignUpPage() {
               required
               inputMode="numeric"
               pattern="[0-9]{6}"
-              maxLength={6}  // ✅ Fixed: 6 digits
+              maxLength={6}
               placeholder="Enter 6-digit OTP"
               className="w-full border border-black p-3 text-black text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-black"
               value={otp}

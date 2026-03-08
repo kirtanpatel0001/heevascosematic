@@ -9,6 +9,7 @@ import {
   Eye,
   EyeOff,
   ArrowRight,
+  ArrowLeft,
   Loader2,
   Sparkles,
 } from 'lucide-react';
@@ -55,14 +56,12 @@ function LoginPageContent() {
         return;
       }
 
-      // Keep login fast when caller already provided the target route.
       if (redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')) {
         router.replace(redirectTo);
         router.refresh();
         return;
       }
 
-      // Resolve role only for default login landing.
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
@@ -88,6 +87,19 @@ function LoginPageContent() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB] px-4">
       <div className="w-full max-w-[400px] bg-white rounded-2xl border border-gray-100 p-8 shadow-sm">
+
+        {/* ── Back to Home ── */}
+        <Link
+          href="/"
+          className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-black transition-colors mb-6 group"
+        >
+          <ArrowLeft
+            size={13}
+            className="group-hover:-translate-x-0.5 transition-transform"
+          />
+          Back to Home
+        </Link>
+
         {error && (
           <div className="mb-4 bg-red-50 text-red-600 text-xs p-3 rounded-lg text-center">
             {error}

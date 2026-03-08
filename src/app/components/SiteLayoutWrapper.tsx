@@ -8,8 +8,10 @@ import Footer from "./Footer";
 export default function SiteLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "";
 
-  // Hide global chrome on admin and auth pages for faster first paint.
-  const hideChrome = pathname.startsWith("/admin") || pathname.startsWith("/auth");
+  // Hide global chrome ONLY on admin pages.
+  // Auth pages (login, signup, etc.) now show the navbar so users can
+  // navigate back without needing the browser back button.
+  const hideChrome = pathname.startsWith("/admin");
 
   return (
     <>
