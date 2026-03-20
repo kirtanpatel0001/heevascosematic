@@ -40,6 +40,7 @@ export default function SignUpPage() {
     setError('');
 
     try {
+      // ── Step 1: Register the user with email + password ───────────────────
       const { error: signUpError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -58,11 +59,22 @@ export default function SignUpPage() {
         throw signUpError;
       }
 
+      // ── Step 2: Send 6-digit OTP for email verification ───────────────────
+      // NOTE: In Supabase Dashboard → Authentication → Email Templates → Magic Link,
+      // make sure your template body uses {{ .Token }} (6-digit OTP) and NOT
+      // {{ .ConfirmationURL }} (magic link). Example:
+      //   Subject: Your verification code
+      //   Body:    Your OTP is: <strong>{{ .Token }}</strong>. Expires in 10 minutes.
       const { error: otpError } = await supabase.auth.signInWithOtp({
         email: formData.email,
+        options: {
+          // Do NOT create a new user — we already signed them up above
+          shouldCreateUser: false,
+        },
       });
 
       if (otpError) {
+        // Rate-limited by Supabase — still move to OTP step so user knows to wait
         if (
           otpError.message.includes('security purposes') ||
           otpError.message.includes('wait')
@@ -93,14 +105,16 @@ export default function SignUpPage() {
         throw new Error('OTP must be 6 digits');
       }
 
+      // ── Verify the 6-digit OTP ────────────────────────────────────────────
       const { error } = await supabase.auth.verifyOtp({
         email: formData.email,
         token: otp,
-        type: 'email',
+        type: 'email',  // matches signInWithOtp type
       });
 
       if (error) throw error;
 
+      // OTP verified → send to login
       router.push('/auth/login');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Invalid or expired OTP';
@@ -137,7 +151,7 @@ export default function SignUpPage() {
             <Sparkles size={18} />
           </div>
           <h1 className="text-2xl font-bold text-black">
-            {step === 1 ? 'Create Account' : 'Verify OTP'}
+            {step === 1 ? 'Create Account' : 'Verify Email'}
           </h1>
           <p className="text-sm text-black mt-2">
             {step === 1
@@ -161,7 +175,9 @@ export default function SignUpPage() {
               placeholder="Email"
               className="w-full border border-black p-3 text-black focus:outline-none focus:ring-2 focus:ring-black"
               value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, email: e.target.value })
+              }
             />
             <input
               required
@@ -170,7 +186,9 @@ export default function SignUpPage() {
               pattern="[0-9]{10}"
               className="w-full border border-black p-3 text-black focus:outline-none focus:ring-2 focus:ring-black"
               value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, phone: e.target.value })
+              }
             />
             <input
               required
@@ -179,7 +197,9 @@ export default function SignUpPage() {
               placeholder="Password (min 8 characters)"
               className="w-full border border-black p-3 text-black focus:outline-none focus:ring-2 focus:ring-black"
               value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, password: e.target.value })
+              }
             />
             <button
               type="submit"

@@ -7,7 +7,6 @@ export async function middleware(req: NextRequest) {
     request: { headers: req.headers },
   });
 
-  // ✅ Use @supabase/ssr instead of old auth-helpers-nextjs
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -31,47 +30,85 @@ export async function middleware(req: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  // ── Always call getUser() to refresh the session cookie ──────────────────
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  // ✅ Protect /admin — server-side role check
-  if (req.nextUrl.pathname.startsWith('/admin')) {
-    if (!user) {
-      return NextResponse.redirect(new URL('/auth/login', req.url));
-    }
+  const { pathname } = req.nextUrl;
 
+  // ── 1. Guard: already logged-in users should not see auth pages ───────────
+  //    Prevents a logged-in admin from landing on /auth/login again
+  const isAuthPage =
+    pathname.startsWith('/auth/login') ||
+    pathname.startsWith('/auth/signup');
+
+  if (isAuthPage && user) {
+    // Fetch role to decide where to send them
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
+
+    if (profile?.role === 'admin') {
+      return NextResponse.redirect(new URL('/admin', req.url));
+    }
+    return NextResponse.redirect(new URL('/', req.url));
+  }
+
+  // ── 2. Guard: /admin — must be authenticated AND have role = 'admin' ──────
+  if (pathname.startsWith('/admin')) {
+    // Not logged in → send to login with redirect param
+    if (!user) {
+      const loginUrl = new URL('/auth/login', req.url);
+      loginUrl.searchParams.set('redirect', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+
+    // Logged in but need to check role
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();                     // ✅ maybeSingle — won't throw if no row
 
     if (profile?.role !== 'admin') {
+      // Authenticated but not admin → send home
       return NextResponse.redirect(new URL('/', req.url));
     }
   }
 
-  // ✅ Protect user-only routes
+  // ── 3. Guard: protected user-only routes ──────────────────────────────────
   const protectedPaths = [
     '/authntication/account',
     '/authntication/checkout',
     '/authntication/order-success',
   ];
+
   const isProtected = protectedPaths.some((path) =>
-    req.nextUrl.pathname.startsWith(path)
+    pathname.startsWith(path)
   );
 
   if (isProtected && !user) {
-    return NextResponse.redirect(new URL('/auth/login', req.url));
+    const loginUrl = new URL('/auth/login', req.url);
+    loginUrl.searchParams.set('redirect', pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
+  // ── Pass through with refreshed session cookies ───────────────────────────
   return response;
 }
 
 export const config = {
   matcher: [
-    '/admin/:path*',
-    '/authntication/account/:path*',
-    '/authntication/checkout/:path*',
-    '/authntication/order-success/:path*',
+    /*
+     * Match all routes EXCEPT:
+     * - _next/static  (static files)
+     * - _next/image   (image optimisation)
+     * - favicon.ico
+     * - public folder assets (png, jpg, svg, etc.)
+     */
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

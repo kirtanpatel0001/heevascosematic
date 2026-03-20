@@ -47,6 +47,7 @@ function LoginPageContent() {
 
       const user = data.user;
 
+      // ── Step 1: Check email verification ──────────────────────────────────
       if (!user?.email_confirmed_at) {
         await supabase.auth.resend({
           type: 'signup',
@@ -56,12 +57,7 @@ function LoginPageContent() {
         return;
       }
 
-      if (redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')) {
-        router.replace(redirectTo);
-        router.refresh();
-        return;
-      }
-
+      // ── Step 2: Always fetch role FIRST before any redirect ───────────────
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
@@ -70,17 +66,34 @@ function LoginPageContent() {
 
       if (profileError) throw profileError;
 
-      if (profile?.role === 'admin') {
-        router.replace('/admin');
-      } else {
-        router.replace('/');
+      const isAdmin = profile?.role === 'admin';
+
+      // ── Step 3: Admin always goes to /admin ───────────────────────────────
+      // Using window.location.href instead of router.replace to force a full
+      // page reload — this ensures session cookies are fully written before
+      // the middleware runs its role check on the server side.
+      if (isAdmin) {
+        window.location.href = '/admin';
+        return;
       }
-      router.refresh();
+
+      // ── Step 4: Non-admin — honour redirectTo if safe ─────────────────────
+      if (
+        redirectTo &&
+        redirectTo.startsWith('/') &&
+        !redirectTo.startsWith('//')
+      ) {
+        window.location.href = redirectTo;
+        return;
+      }
+
+      // ── Step 5: Default fallback for regular users ────────────────────────
+      window.location.href = '/';
+
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Login failed';
       setError(message);
-    } finally {
-      setLoading(false);
+      setLoading(false); // only reset on error — success navigates away
     }
   };
 
