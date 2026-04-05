@@ -144,16 +144,40 @@ export default function CheckoutPage() {
     labelType: 'Home', customLabel: '',
   });
 
-  // ── Computed totals ──────────────────────────────────────────
-  const subtotal   = cartItems.reduce((a, i) => a + i.product.price * i.quantity, 0);
+  // ── Computed totals (GST-inclusive pricing) ──────────────────
+  //
+  // Product prices stored in DB are GST-INCLUSIVE.
+  // Flow:
+  //   1. Strip GST out  → base price = price / (1 + taxRate/100)
+  //   2. Subtotal       = Σ (basePrice × qty)
+  //   3. Discount       applies on subtotal (ex-GST)
+  //   4. GST            = (subtotal - discount) × taxRate/100
+  //   5. Grand Total    = subtotal - discount + GST + shipping
+  //
+  const taxRate    = settings?.tax_rate || 0;
   const currency   = settings?.currency || 'INR';
-  const taxAmount  = ((settings?.tax_rate || 0) * subtotal) / 100;
+
+  // Ex-GST subtotal (prices stripped of GST)
+  const subtotal   = cartItems.reduce(
+    (a, i) => a + (i.product.price / (1 + taxRate / 100)) * i.quantity,
+    0
+  );
+
+  // Discount on ex-GST subtotal
+  // (discountAmount state is already computed from subtotal on applyCoupon)
+
+  // GST re-applied on discounted ex-GST amount
+  const taxAmount  = ((subtotal - discountAmount) * taxRate) / 100;
+
   const shipping   = (() => {
     const dc = settings?.delivery_charge || 0;
     const ft = settings?.free_shipping_threshold || 0;
-    if (ft > 0 && subtotal >= ft) return 0;
+    // threshold check against inclusive price total (what user sees)
+    const inclusiveTotal = cartItems.reduce((a, i) => a + i.product.price * i.quantity, 0);
+    if (ft > 0 && inclusiveTotal >= ft) return 0;
     return dc;
   })();
+
   const grandTotal = Math.max(0, subtotal - discountAmount + taxAmount + shipping);
 
   // ── Refresh addresses ────────────────────────────────────────
@@ -316,11 +340,13 @@ export default function CheckoutPage() {
   };
 
   // ── Coupon ───────────────────────────────────────────────────
+  // Coupon discount is calculated on ex-GST subtotal
   const applyCoupon = async () => {
     if (!couponInput.trim()) return;
     setCouponLoading(true); setCouponError(null);
     try {
       const c = await validateCoupon(couponInput);
+      // Pass ex-GST subtotal so discount is on base price
       const disc = calcDiscount(subtotal, c.discount_value, c.discount_type);
       setAppliedCoupon(c); setDiscountAmount(disc);
     } catch (e: unknown) {
@@ -417,6 +443,8 @@ export default function CheckoutPage() {
   );
 
   const totalQty = cartItems.reduce((a, i) => a + i.quantity, 0);
+  // Inclusive total for display in product list
+  const inclusiveSubtotal = cartItems.reduce((a, i) => a + i.product.price * i.quantity, 0);
 
   // ════════════════════════════════════════════════════════════
   return (
@@ -584,7 +612,7 @@ export default function CheckoutPage() {
                     </div>
                   </div>
 
-                  {/* Price */}
+                  {/* Price — show inclusive price (as stored in DB) */}
                   <div className="text-right shrink-0">
                     <p className="text-sm font-black text-slate-900">
                       {fmt(currency, item.product.price * item.quantity)}
@@ -601,15 +629,21 @@ export default function CheckoutPage() {
 
             {/* ── Price Breakdown ──────────────────────────── */}
             <div className="px-6 py-4 space-y-2.5 text-sm border-t border-gray-100 bg-gray-50/40">
+
+              {/* Subtotal shown as inclusive (what user paid / product price total) */}
               <div className="flex justify-between text-gray-500">
                 <span>Subtotal ({totalQty} {totalQty === 1 ? 'item' : 'items'})</span>
-                <span className="font-semibold text-black">{fmt(currency, subtotal)}</span>
+                <span className="font-semibold text-black">{fmt(currency, inclusiveSubtotal)}</span>
               </div>
 
-              {!!settings?.tax_rate && (
+              {/* GST extracted from inclusive price, shown as a line item */}
+              {!!taxRate && (
                 <div className="flex justify-between text-gray-500">
-                  <span>{settings.tax_name || 'Tax'} ({settings.tax_rate}%)</span>
-                  <span className="font-semibold text-black">+ {fmt(currency, taxAmount)}</span>
+                  <span>{settings?.tax_name || 'GST'} ({taxRate}%) <span className="text-[10px] text-gray-400">(incl.)</span></span>
+                  <span className="font-semibold text-black">
+                    {/* GST extracted from inclusive subtotal before any discount */}
+                    {fmt(currency, inclusiveSubtotal - subtotal)}
+                  </span>
                 </div>
               )}
 
@@ -640,8 +674,9 @@ export default function CheckoutPage() {
                             }
                           </span>
                         </div>
+                        {/* Show total saving = discount on base + GST difference */}
                         <p className="text-[11px] text-emerald-700 font-bold mt-0.5">
-                          − {fmt(currency, discountAmount)} saved 🎉
+                          − {fmt(currency, discountAmount + discountAmount * taxRate / 100)} saved 🎉
                         </p>
                       </div>
                     </div>
@@ -660,7 +695,6 @@ export default function CheckoutPage() {
                         <input
                           type="text" value={couponInput}
                           onChange={e => {
-                            // Strip all whitespace + uppercase — fixes copy-paste issues
                             setCouponInput(e.target.value.replace(/\s+/g, '').toUpperCase());
                             setCouponError(null);
                           }}
@@ -686,13 +720,16 @@ export default function CheckoutPage() {
                 )}
               </div>
 
-              {/* Coupon discount line */}
+              {/* Coupon discount line — shows base discount + GST saved combined */}
               {discountAmount > 0 && (
                 <div className="flex justify-between">
                   <span className="text-emerald-600 flex items-center gap-1.5">
                     <Tag size={11} /> Discount
                   </span>
-                  <span className="font-bold text-emerald-600">− {fmt(currency, discountAmount)}</span>
+                  {/* discountAmount is on ex-GST base; add GST portion for display */}
+                  <span className="font-bold text-emerald-600">
+                    − {fmt(currency, discountAmount + discountAmount * taxRate / 100)}
+                  </span>
                 </div>
               )}
 
@@ -705,7 +742,7 @@ export default function CheckoutPage() {
                   <p>{fmt(currency, grandTotal)}</p>
                   {discountAmount > 0 && (
                     <p className="text-[11px] font-bold text-emerald-600">
-                      You save {fmt(currency, discountAmount)}
+                      You save {fmt(currency, discountAmount + discountAmount * taxRate / 100)}
                     </p>
                   )}
                 </div>

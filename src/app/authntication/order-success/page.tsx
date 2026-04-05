@@ -8,8 +8,9 @@ import {
   ShoppingBag, Download, MapPin, Mail, Phone, Store
 } from 'lucide-react';
 import { supabaseClient } from '@/lib/supabaseClient';
+import { InvoicePDF } from '@/components/invoice/InvoiceTemplate';
+import type { InvoiceData, StoreSettings } from '@/components/invoice/InvoiceTemplate';
 import dynamic from 'next/dynamic';
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 
 const PDFDownloadLink = dynamic(
   () => import('@react-pdf/renderer').then((mod) => mod.PDFDownloadLink),
@@ -48,81 +49,21 @@ interface Order {
   items: OrderItem[];
 }
 
-interface StoreSettings {
-  store_name: string;
-  support_email: string;
-  support_phone: string;
-  currency: string;
-  tax_name: string;
-  tax_rate: number;
-  delivery_charge: number;
-  free_shipping_threshold: number;
+function toInvoiceData(order: Order): InvoiceData {
+  return {
+    id: order.id,
+    created_at: order.created_at,
+    total_amount: order.total_amount,
+    payment_method: order.payment_method,
+    shipping_address: order.shipping_address,
+    items: order.items.map((item) => ({
+      name: item.product.name,
+      category: item.product.category,
+      quantity: item.quantity,
+      price: item.price,
+    })),
+  };
 }
-
-const pdfStyles = StyleSheet.create({
-  page: { padding: 40, fontFamily: 'Helvetica', fontSize: 10, color: '#333' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 30, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 20 },
-  logoText: { fontSize: 20, fontWeight: 'bold', textTransform: 'uppercase' },
-  sectionTitle: { fontSize: 12, fontWeight: 'bold', marginBottom: 8, marginTop: 15 },
-  tableHeader: { flexDirection: 'row', backgroundColor: '#f9fafb', padding: 8, marginTop: 10, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  tableRow: { flexDirection: 'row', padding: 8, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  colProd: { flex: 3 },
-  colQty: { flex: 1, textAlign: 'center' },
-  colPrice: { flex: 1, textAlign: 'right' },
-  totalSection: { marginTop: 20, alignItems: 'flex-end' },
-});
-
-const InvoicePDF = ({ order, settings }: { order: Order; settings: StoreSettings }) => (
-  <Document>
-    <Page size="A4" style={pdfStyles.page}>
-      <View style={pdfStyles.header}>
-        <View>
-          <Text style={pdfStyles.logoText}>{settings.store_name}</Text>
-          <Text style={{ fontSize: 9, color: '#666', marginTop: 4 }}>{settings.support_email}</Text>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ fontSize: 16, fontWeight: 'bold' }}>INVOICE</Text>
-          <Text style={{ marginTop: 4 }}>#{order.id.slice(0, 8).toUpperCase()}</Text>
-          <Text>{new Date(order.created_at).toLocaleDateString()}</Text>
-        </View>
-      </View>
-
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <View style={{ width: '45%' }}>
-          <Text style={pdfStyles.sectionTitle}>Bill To:</Text>
-          <Text>{order.shipping_address.firstName} {order.shipping_address.lastName}</Text>
-          <Text>{order.shipping_address.address}</Text>
-          <Text>{order.shipping_address.city} - {order.shipping_address.pincode}</Text>
-          <Text>Tel: {order.shipping_address.phone}</Text>
-        </View>
-      </View>
-
-      <View>
-        <View style={pdfStyles.tableHeader}>
-          <Text style={pdfStyles.colProd}>Item</Text>
-          <Text style={pdfStyles.colQty}>Qty</Text>
-          <Text style={pdfStyles.colPrice}>Total</Text>
-        </View>
-        {order.items.map((item, i) => (
-          <View key={i} style={pdfStyles.tableRow}>
-            <Text style={pdfStyles.colProd}>{item.product.name}</Text>
-            <Text style={pdfStyles.colQty}>{item.quantity}</Text>
-            <Text style={pdfStyles.colPrice}>{settings.currency} {item.price * item.quantity}</Text>
-          </View>
-        ))}
-      </View>
-
-      <View style={pdfStyles.totalSection}>
-        <View style={{ width: 200 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingTop: 5, borderTopWidth: 1 }}>
-            <Text style={{ fontWeight: 'bold' }}>Total Paid:</Text>
-            <Text style={{ fontWeight: 'bold' }}>{settings.currency} {order.total_amount}</Text>
-          </View>
-        </View>
-      </View>
-    </Page>
-  </Document>
-);
 
 function OrderSuccessContent() {
   const searchParams = useSearchParams();
@@ -155,7 +96,7 @@ function OrderSuccessContent() {
 
         const { data: settingsData } = await supabase
           .from('store_settings')
-          .select('store_name, support_email, support_phone, currency, tax_name, tax_rate, delivery_charge, free_shipping_threshold')
+          .select('store_name, support_email, support_phone, currency, tax_name, tax_rate, delivery_charge, free_shipping_threshold, gst_number, address, city, pincode, website')
           .eq('id', 1)
           .single();
 
@@ -279,8 +220,8 @@ function OrderSuccessContent() {
               </p>
               {isClient && (
                 <PDFDownloadLink
-                  document={<InvoicePDF order={order} settings={settings} />}
-                  fileName={`invoice-${order.id.slice(0, 6)}.pdf`}
+                  document={<InvoicePDF invoice={toInvoiceData(order)} settings={settings} />}
+                  fileName={`INV-${order.id.slice(0, 8).toUpperCase()}.pdf`}
                   className="w-full block"
                 >
                   {({ loading: pdfLoading }) => (

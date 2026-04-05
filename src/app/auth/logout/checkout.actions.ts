@@ -23,7 +23,7 @@ type NormalizedItem = {
   quantity: number;
   product: {
     id: string;
-    price: number;
+    price: number;       // GST-inclusive price as stored in DB
     stock: number;
     is_visible: boolean;
   };
@@ -46,9 +46,19 @@ function timingSafeHexEqual(expected: string, actual: string): boolean {
   return crypto.timingSafeEqual(expectedBuf, actualBuf);
 }
 
+/**
+ * Fetches cart and computes totals using GST-inclusive pricing logic:
+ *
+ *   1. Strip GST out of each product price → base price = price / (1 + taxRate/100)
+ *   2. subtotal = Σ (basePrice × qty)        ← ex-GST
+ *   3. discount applies on subtotal           ← ex-GST basis
+ *   4. taxAmount = (subtotal - discount) × taxRate/100
+ *   5. grandTotal = subtotal - discount + taxAmount + shipping
+ */
 async function getCartTotal(userId: string): Promise<{
-  subtotal: number;
-  taxAmount: number;
+  subtotal: number;       // ex-GST
+  taxRate: number;
+  taxAmount: number;      // GST on (subtotal - discount), computed after discount known
   shippingCost: number;
   items: NormalizedItem[];
 }> {
@@ -69,33 +79,43 @@ async function getCartTotal(userId: string): Promise<{
     .eq('id', 1)
     .single();
 
+  const taxRate        = settings?.tax_rate || 0;
+  const deliveryCharge = settings?.delivery_charge || 0;
+  const freeThreshold  = settings?.free_shipping_threshold || 0;
+
   const items: NormalizedItem[] = (cartItems as RawCartItem[]).map((item) => {
     const product = Array.isArray(item.product) ? item.product[0] : item.product;
     return { quantity: item.quantity, product };
   });
 
+  // Validate stock & visibility, compute ex-GST subtotal
   let subtotal = 0;
+  let inclusiveTotal = 0;
   for (const item of items) {
     if (!item.product?.is_visible) throw new Error('A product in your cart is no longer available.');
     if (item.quantity > item.product.stock) {
       throw new Error(`Insufficient stock for product: ${item.product.id}`);
     }
-    subtotal += item.quantity * item.product.price;
+    // Strip GST: base price = inclusive price / (1 + rate/100)
+    const basePrice = item.product.price / (1 + taxRate / 100);
+    subtotal      += basePrice * item.quantity;
+    inclusiveTotal += item.product.price * item.quantity;
   }
 
-  const taxRate = settings?.tax_rate || 0;
-  const deliveryCharge = settings?.delivery_charge || 0;
-  const freeThreshold = settings?.free_shipping_threshold || 0;
-  const taxAmount = (subtotal * taxRate) / 100;
-  const shippingCost = freeThreshold > 0 && subtotal >= freeThreshold ? 0 : deliveryCharge;
+  // Shipping threshold checked against inclusive total (what user sees)
+  const shippingCost = freeThreshold > 0 && inclusiveTotal >= freeThreshold ? 0 : deliveryCharge;
 
-  return { subtotal, taxAmount, shippingCost, items };
+  // taxAmount is computed here without discount (discount deducted in caller)
+  // We return taxRate so callers can recompute taxAmount after discount
+  const taxAmount = (subtotal * taxRate) / 100;
+
+  return { subtotal, taxRate, taxAmount, shippingCost, items };
 }
 
 async function validateCouponServer(
   couponCode: string | null,
   userId: string,
-  subtotal: number
+  subtotal: number   // ex-GST subtotal
 ): Promise<{ discountAmount: number; couponId: string | null; couponCode: string | null }> {
   if (!couponCode?.trim()) return { discountAmount: 0, couponId: null, couponCode: null };
 
@@ -121,6 +141,7 @@ async function validateCouponServer(
 
   if (alreadyUsed) throw new Error('You have already used this coupon.');
 
+  // Discount calculated on ex-GST subtotal
   return {
     discountAmount: calcDiscount(subtotal, coupon.discount_value, coupon.discount_type),
     couponId: coupon.id,
@@ -135,8 +156,11 @@ export async function initiateRazorpay(couponCode?: string) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error('Unauthorized. Please login.');
 
-  const { subtotal, taxAmount, shippingCost } = await getCartTotal(user.id);
+  const { subtotal, taxRate, shippingCost } = await getCartTotal(user.id);
   const { discountAmount } = await validateCouponServer(couponCode ?? null, user.id, subtotal);
+
+  // GST applied on (subtotal - discount), i.e. discounted base amount
+  const taxAmount  = ((subtotal - discountAmount) * taxRate) / 100;
   const grandTotal = Math.max(0, subtotal - discountAmount + taxAmount + shippingCost);
 
   try {
@@ -180,14 +204,18 @@ export async function createOrder(formData: FormData): Promise<{ orderId: string
     pincode: formData.get('pincode') as string,
   };
 
-  const { subtotal, taxAmount, shippingCost, items } = await getCartTotal(user.id);
+  const { subtotal, taxRate, shippingCost, items } = await getCartTotal(user.id);
   const couponInput = formData.get('couponCode') as string | null;
   const { discountAmount, couponId, couponCode } = await validateCouponServer(couponInput, user.id, subtotal);
+
+  // GST on discounted base amount
+  const taxAmount  = ((subtotal - discountAmount) * taxRate) / 100;
   const grandTotal = Math.max(0, subtotal - discountAmount + taxAmount + shippingCost);
+
   const expectedAmountPaise = Math.round(grandTotal * 100);
 
   if (paymentMethod === 'card' || paymentMethod === 'upi') {
-    const rzpOrderId = formData.get('razorpay_order_id') as string;
+    const rzpOrderId   = formData.get('razorpay_order_id') as string;
     const rzpPaymentId = formData.get('razorpay_payment_id') as string;
     const rzpSignature = formData.get('razorpay_signature') as string;
 
@@ -256,7 +284,7 @@ export async function createOrder(formData: FormData): Promise<{ orderId: string
         order_id: order.id,
         product_id: item.product.id,
         quantity: item.quantity,
-        price: item.product.price,
+        price: item.product.price,   // store inclusive price for records
       }))
     );
     if (itemsError) throw new Error('Failed to save order items.');
