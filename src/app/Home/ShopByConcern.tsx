@@ -52,7 +52,7 @@ const ShopByConcernFinal = () => {
       subtitle: "Remove dandruff & buildup",
       icon: <Sparkles className="w-6 h-6" />,
       queryParam: "scalp-detox",
-      image: "https://plus.unsplash.com/premium_photo-1733317329824-7028adef050a?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0",
+      image: "/imges/111.jpeg",
     },
     {
       id: 4,
@@ -60,7 +60,7 @@ const ShopByConcernFinal = () => {
       subtitle: "Revive heat-treated hair",
       icon: <Zap className="w-6 h-6" />,
       queryParam: "damage-repair",
-      image: "https://plus.unsplash.com/premium_photo-1728693696268-408c2647eb2d?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0",
+      image: "/imges/1.jpeg",
     },
   ];
 
