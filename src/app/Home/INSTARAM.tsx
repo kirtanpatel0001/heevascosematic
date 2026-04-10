@@ -85,11 +85,11 @@ const STYLES = `
    DATA
 ───────────────────────────────────────────── */
 const REELS = [
-  { id:1, video:"/VIEDOS/3.mp4", poster:"/imges/vv/01 Hair Oil/01 Hair Oil Amazon.jpg",          name:"Hair Oil",      sub:"Deeply nourishing",    price:"Rs. 699",   img:"/imges/vv/01 Hair Oil/01 Hair Oil Amazon.jpg",         href:"/product/c3225a76-cfce-4bc0-aece-aa9acae89793" },
-  { id:2, video:"/VIEDOS/2.mp4", poster:"/imges/Shampoo/01 Amazon.png",                          name:"Shampoo",       sub:"Restore & strengthen", price:"Rs. 499",   img:"/imges/Shampoo/01 Amazon.png",                         href:"/product/880f3180-f861-4920-a8c3-7f299710a68f" },
-  { id:3, video:"/VIEDOS/1.mp4", poster:"/imges/Conditionar/01 Amazon.png",                      name:"Conditioner",   sub:"Silky smooth finish",  price:"Rs. 599",   img:"/imges/Conditionar/01 Amazon.png",                     href:"/product/e69dac74-f0d8-4d5c-96c8-b720f9629d11" },
-  { id:4, video:"/VIEDOS/5.mp4", poster:"/imges/vv/02 Hair Cleanser/517jMoaExzL._SL1500_.jpg",   name:"Hair Cleanser", sub:"One-step clarity",     price:"Rs. 1,399", img:"/imges/vv/02 Hair Cleanser/517jMoaExzL._SL1500_.jpg",  href:"/product/4e0f78b3-0f23-4d65-9b0b-27f1e8fbe266" },
-  { id:5, video:"/VIEDOS/4.mp4", poster:"/imges/vv/03 Hair Mask/HAIRMASK.jpeg",                  name:"Hair Mask",     sub:"Intensive repair",     price:"Rs. 199",   img:"/imges/vv/03 Hair Mask/HAIRMASK.jpeg",                 href:"/product/0d186b1d-fc8e-4cdc-8c30-e5717c94629c" },
+  { id:1, video:"/VIEDOS/3.mp4", poster:"/imges/vv/01 Hair Oil/01 Hair Oil Amazon.jpg",          name:"Hair Oil",      sub:"Deeply nourishing",    price:"Rs. 470",   img:"/imges/vv/01 Hair Oil/01 Hair Oil Amazon.jpg",         href:"/product/c3225a76-cfce-4bc0-aece-aa9acae89793" },
+  { id:2, video:"/VIEDOS/2.mp4", poster:"/imges/Shampoo/01 Amazon.png",                          name:"Shampoo",       sub:"Restore & strengthen", price:"Rs. 440",   img:"/imges/Shampoo/01 Amazon.png",                         href:"/product/880f3180-f861-4920-a8c3-7f299710a68f" },
+  { id:3, video:"/VIEDOS/1.mp4", poster:"/imges/Conditionar/01 Amazon.png",                      name:"Conditioner",   sub:"Silky smooth finish",  price:"Rs. 390",   img:"/imges/Conditionar/01 Amazon.png",                     href:"/product/e69dac74-f0d8-4d5c-96c8-b720f9629d11" },
+  { id:4, video:"/VIEDOS/5.mp4", poster:"/imges/vv/02 Hair Cleanser/517jMoaExzL._SL1500_.jpg",   name:"Hair Cleanser", sub:"One-step clarity",     price:"Rs. 460", img:"/imges/vv/02 Hair Cleanser/517jMoaExzL._SL1500_.jpg",  href:"/product/4e0f78b3-0f23-4d65-9b0b-27f1e8fbe266" },
+  { id:5, video:"/VIEDOS/4.mp4", poster:"/imges/vv/03 Hair Mask/HAIRMASK.jpeg",                  name:"Hair Mask",     sub:"Intensive repair",     price:"Rs. 550",   img:"/imges/vv/03 Hair Mask/HAIRMASK.jpeg",                 href:"/product/0d186b1d-fc8e-4cdc-8c30-e5717c94629c" },
 ];
 
 /* ─────────────────────────────────────────────
